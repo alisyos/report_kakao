@@ -88,8 +88,16 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'adGroupIds parameter is required' }, { status: 400 });
         }
         console.log(`광고 그룹 리포트 조회: ${adAccountId} ${start} ~ ${end} (${timeUnit})`);
-        // 임시로 캠페인 리포트 함수를 사용합니다 (실제로는 광고 그룹 리포트 API 사용)
-        result = await kakaoAdApi.getCampaignReport(adAccountId, campaignIds || [], start, end, metrics, timeUnit);
+        // 광고 그룹 리포트 함수 사용 - campaignId 파라미터 추가
+        result = await kakaoAdApi.getAdGroupReport(
+          adAccountId, 
+          adGroupIds, 
+          start, 
+          end, 
+          metrics, 
+          timeUnit,
+          body.campaignId // 요청 바디에서 캠페인 ID 전달
+        );
         break;
       case 'keywordReport':
         if (!keywordIds || !keywordIds.length) {

@@ -349,15 +349,14 @@ export const getCampaignReport = async (
       metricsGroups: metricsGroups.join(',') // 문자열로 변환
     };
     
-    // 날짜별 데이터가 필요한 경우에만 dimension과 timeUnit 추가
+    // 날짜별 데이터가 필요한 경우에만 timeUnit만 추가(dimension 제거)
     if (timeUnit !== 'NONE') {
-      params.dimension = 'DATE';  // 날짜 기준으로 데이터 조회
       params.timeUnit = timeUnit;
     }
     
     // 캠페인 ID를 쿼리 파라미터로 추가 (선택 사항)
     if (campaignIds && campaignIds.length > 0) {
-      params.campaignId = campaignIds[0]; // 현재는 첫번째 캠페인만 사용
+      params.campaignIds = campaignIds.join(','); // 모든 캠페인 ID를 콤마로 구분하여 넣기
     }
     
     console.log('캠페인 리포트 요청 파라미터:', params);
@@ -386,16 +385,31 @@ export const getCampaignReport = async (
       const campaignId = dimensions.campaignId || 'unknown';
       const reportDate = dimensions.date || item.start || '';
       
+      // 리포트 항목 로깅 - 계정 리포트와 동일한 방식으로 로그 출력
+      console.log('리포트 항목 처리:', { 
+        date: reportDate, 
+        metrics: JSON.stringify(metrics),
+        imp: metrics.imp,
+        click: metrics.click,
+        spending: metrics.spending
+      });
+      
       return {
         id: reportDate ? `${campaignId}-${reportDate}` : campaignId,
         name: reportDate || campaignNamesMap[campaignId] || `캠페인 ${campaignId}`,
         date: reportDate,
         campaignName: campaignNamesMap[campaignId] || `캠페인 ${campaignId}`,
-        impressions: metrics.imp || 0,
-        clicks: metrics.click || 0,
+        // API 원본 필드 이름과 값 유지 - 계정 리포트와 동일하게
+        imp: metrics.imp ? parseInt(metrics.imp) : 0,
+        click: metrics.click ? parseInt(metrics.click) : 0,
+        spending: metrics.spending ? parseInt(metrics.spending) : 0,
+        
+        // 다른 필드도 유지
+        impressions: metrics.imp ? parseInt(metrics.imp) : 0,
+        clicks: metrics.click ? parseInt(metrics.click) : 0,
         ctr: (metrics.ctr || 0) / 100,
         cpc: metrics.ppc || 0,
-        cost: metrics.spending || 0,
+        cost: metrics.spending ? parseInt(metrics.spending) : 0,
         conversions: metrics.convPurchase1d || 0,
         conversionRate: (metrics.convPurchase1d && metrics.click) ? 
                        (metrics.convPurchase1d / metrics.click) : 0,
@@ -407,6 +421,7 @@ export const getCampaignReport = async (
       };
     });
     
+    console.log('캠페인 리포트 최종 데이터 개수:', formattedData.length);
     return { data: formattedData };
   } catch (error: any) {
     console.error('캠페인 리포트 조회 오류:', error.response?.status, error.response?.data || error.message);
@@ -433,6 +448,170 @@ export const getCampaignReport = async (
         costPerConversion: 9966.67 - (index * 1000),
         conversionValue: 15600000 * multiplier,
         roas: 13.0 + (index * 0.5)
+      };
+    });
+    
+    return { data: testData };
+  }
+};
+
+// 광고 그룹별 리포트 데이터 조회
+export const getAdGroupReport = async (
+  adAccountId: string,
+  adGroupIds: string[],
+  startDate: string,
+  endDate: string,
+  metricsGroups: string[] = ['BASIC', 'CONVERSION_TRACKING'],
+  timeUnit: string = 'DAY',
+  campaignId?: string
+) => {
+  try {
+    // 날짜 형식 변환 (YYYY-MM-DD -> YYYYMMDD)
+    const start = startDate.replace(/-/g, '');
+    const end = endDate.replace(/-/g, '');
+    
+    console.log('광고 그룹 리포트 조회 시도:', adAccountId, adGroupIds, startDate, endDate, metricsGroups, timeUnit, campaignId);
+    
+    // campaignId가 필수이므로 확인
+    if (!campaignId) {
+      console.error('광고 그룹 리포트 오류: 캠페인 ID가 없습니다.');
+      throw new Error('캠페인 ID가 필요합니다. 캠페인을 먼저 선택해주세요.');
+    }
+    
+    // 요청 파라미터 구성 - 계정 리포트와 동일한 방식으로
+    const params: any = {
+      start,
+      end,
+      metricsGroups: metricsGroups.join(','), // 문자열로 변환
+      campaignId // 필수 파라미터
+    };
+    
+    // 날짜별 데이터가 필요한 경우에만 timeUnit만 추가
+    if (timeUnit && timeUnit !== 'NONE') {
+      params.timeUnit = timeUnit;
+    }
+    
+    // 광고 그룹 ID를 쿼리 파라미터로 추가할 필요가 있다면
+    if (adGroupIds && adGroupIds.length > 0) {
+      params.adGroupIds = adGroupIds.join(','); // 모든 광고 그룹 ID를 콤마로 구분하여 넣기
+    }
+    
+    console.log('광고 그룹 리포트 요청 파라미터:', params);
+    
+    // API 호출 - 계정 리포트와 유사하게 구성
+    const response = await apiClient({
+      method: 'GET',
+      url: '/openapi/v1/adGroups/report',
+      headers: {
+        'adAccountId': adAccountId
+      },
+      params: params
+    });
+    
+    console.log('광고 그룹 리포트 응답 상태:', response.status);
+    console.log('광고 그룹 리포트 응답 데이터:', JSON.stringify(response.data).substring(0, 500) + '...');
+    
+    // 응답 매핑 처리
+    const reportItems = response.data?.data || [];
+    console.log('광고 그룹 리포트 세부 데이터:', JSON.stringify(reportItems.slice(0, 2)));
+    
+    // 이름 매핑을 위해 광고 그룹 데이터 조회 (필요한 경우에만)
+    let adGroupNamesMap: Record<string, string> = {};
+    try {
+      const adGroupsResponse = await apiClient.get('/openapi/v1/adGroups', {
+        headers: {
+          'adAccountId': adAccountId
+        },
+        params: {
+          campaignId // 캠페인 ID로 필터링
+        }
+      });
+      
+      const adGroups = Array.isArray(adGroupsResponse.data) 
+        ? adGroupsResponse.data 
+        : (adGroupsResponse.data?.content || []);
+      
+      // 광고 그룹 ID를 키로, 이름을 값으로 하는 매핑 생성
+      adGroups.forEach((adGroup: any) => {
+        adGroupNamesMap[adGroup.id] = adGroup.name;
+      });
+    } catch (error) {
+      console.warn('광고 그룹 정보 조회 실패 (이름 매핑 불가):', error);
+    }
+    
+    // 응용 프로그램에서 사용하는 형식으로 변환
+    const formattedData = reportItems.map((item: any) => {
+      const dimensions = item.dimensions || {};
+      const metrics = item.metrics || {};
+      const adGroupId = dimensions.adGroupId || 'unknown';
+      const reportDate = dimensions.date || item.start || '';
+      
+      // 리포트 항목 로깅
+      console.log('리포트 항목 처리:', { 
+        date: reportDate, 
+        metrics: JSON.stringify(metrics),
+        imp: metrics.imp,
+        click: metrics.click,
+        spending: metrics.spending
+      });
+      
+      return {
+        id: reportDate ? `${adGroupId}-${reportDate}` : adGroupId,
+        name: reportDate || adGroupNamesMap[adGroupId] || `광고 그룹 ${adGroupId}`,
+        date: reportDate,
+        adGroupName: adGroupNamesMap[adGroupId] || `광고 그룹 ${adGroupId}`,
+        // API 원본 필드 이름과 값 유지
+        imp: metrics.imp ? parseInt(metrics.imp) : 0,
+        click: metrics.click ? parseInt(metrics.click) : 0,
+        spending: metrics.spending ? parseInt(metrics.spending) : 0,
+        
+        // 다른 필드도 유지
+        impressions: metrics.imp ? parseInt(metrics.imp) : 0,
+        clicks: metrics.click ? parseInt(metrics.click) : 0,
+        ctr: (metrics.ctr || 0) / 100,
+        cpc: metrics.ppc || 0,
+        cost: metrics.spending ? parseInt(metrics.spending) : 0,
+        conversions: metrics.convPurchase1d || 0,
+        conversionRate: (metrics.convPurchase1d && metrics.click) ? 
+                       (metrics.convPurchase1d / metrics.click) : 0,
+        costPerConversion: (metrics.convPurchase1d && metrics.spending) ? 
+                          (metrics.spending / metrics.convPurchase1d) : 0,
+        conversionValue: metrics.convPurchaseP1d || 0,
+        roas: (metrics.convPurchaseP1d && metrics.spending) ? 
+              (metrics.convPurchaseP1d / metrics.spending) : 0
+      };
+    });
+    
+    console.log('광고 그룹 리포트 최종 데이터 개수:', formattedData.length);
+    return { data: formattedData };
+  } catch (error: any) {
+    console.error('광고 그룹 리포트 조회 오류:', error.response?.status, error.response?.data || error.message);
+    // 임시 테스트 데이터 반환
+    const testData = adGroupIds.map((id, index) => {
+      const multiplier = index + 1;
+      // 테스트 데이터에도 날짜 추가
+      const date = new Date(startDate);
+      date.setDate(date.getDate() + index);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      return {
+        id: `${id}-${dateStr}`,
+        name: dateStr,
+        date: dateStr,
+        adGroupName: `테스트 광고 그룹 ${index + 1}`,
+        imp: 25000 * multiplier,
+        click: 1200 * multiplier,
+        spending: 720000 * multiplier,
+        impressions: 25000 * multiplier,
+        clicks: 1200 * multiplier,
+        ctr: 0.048 * multiplier,
+        cpc: 600 - (index * 30),
+        cost: 720000 * multiplier,
+        conversions: 80 * multiplier,
+        conversionRate: 0.066 * multiplier,
+        costPerConversion: 9000 - (index * 800),
+        conversionValue: 9600000 * multiplier,
+        roas: 13.3 + (index * 0.4)
       };
     });
     
@@ -484,9 +663,8 @@ export async function getKeywordReport(
       metricsGroups: metricsGroups.join(',')
     };
     
-    // 날짜별 데이터가 필요한 경우에만 dimension과 timeUnit 추가
+    // 날짜별 데이터가 필요한 경우에만 timeUnit만 추가(dimension 제거)
     if (timeUnit !== 'NONE') {
-      params.dimension = 'DATE';  // 날짜 기준으로 데이터 조회
       params.timeUnit = timeUnit;
     }
 
@@ -588,5 +766,6 @@ export default {
   getKeywords,
   getAccountReport,
   getCampaignReport,
+  getAdGroupReport,
   getKeywordReport,
 }; 

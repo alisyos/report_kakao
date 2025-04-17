@@ -224,7 +224,7 @@ const KeywordAnalysis = () => {
       setError(null);
       
       let endpoint = 'accountReport';
-      let params = {
+      let params: any = {
         adAccountId: selectedAccountId,
         startDate: dateFilter.startDate,
         endDate: dateFilter.endDate,
@@ -232,7 +232,35 @@ const KeywordAnalysis = () => {
         metricsGroups: ['BASIC']
       };
       
-      console.log(`리포트 생성 요청 - 계정: ${selectedAccountId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
+      // 광고 그룹이 선택된 경우, 광고 그룹 리포트 API 사용
+      if (selectedAdGroupId) {
+        endpoint = 'adGroupReport';
+        params = {
+          adAccountId: selectedAccountId,
+          adGroupIds: [selectedAdGroupId],
+          campaignId: selectedCampaignId,
+          startDate: dateFilter.startDate,
+          endDate: dateFilter.endDate,
+          timeUnit: 'DAY',
+          metricsGroups: ['BASIC']
+        };
+        console.log(`광고 그룹 리포트 생성 요청 - 계정: ${selectedAccountId}, 캠페인: ${selectedCampaignId}, 광고 그룹: ${selectedAdGroupId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
+      }
+      // 캠페인이 선택된 경우, 캠페인 리포트 API 사용
+      else if (selectedCampaignId) {
+        endpoint = 'campaignReport';
+        params = {
+          adAccountId: selectedAccountId,
+          campaignIds: [selectedCampaignId],
+          startDate: dateFilter.startDate,
+          endDate: dateFilter.endDate,
+          timeUnit: 'DAY',
+          metricsGroups: ['BASIC']
+        };
+        console.log(`캠페인 리포트 생성 요청 - 계정: ${selectedAccountId}, 캠페인: ${selectedCampaignId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
+      } else {
+        console.log(`계정 리포트 생성 요청 - 계정: ${selectedAccountId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
+      }
       
       // API 호출
       const response = await axios.post('/api/kakao', {
@@ -245,7 +273,16 @@ const KeywordAnalysis = () => {
       if (response.data && response.data.data) {
         // API 원본 데이터를 그대로 설정
         setDateReportData(response.data.data);
-        setGeneratedLevel('account');
+        
+        // 선택된 레벨에 따라 generatedLevel 설정
+        let level: 'account' | 'campaign' | 'adGroup' | 'keyword' = 'account';
+        if (selectedAdGroupId) {
+          level = 'adGroup';
+        } else if (selectedCampaignId) {
+          level = 'campaign';
+        }
+        
+        setGeneratedLevel(level);
         setReportGenerated(true);
       } else {
         setError('리포트 데이터를 불러오는데 실패했습니다.');
@@ -262,7 +299,7 @@ const KeywordAnalysis = () => {
 
   return (
     <div className="container mx-auto p-4 max-w-screen-xl">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">키워드 분석</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800">광고 리포트</h1>
       
       <div className="bg-white p-4 rounded-lg shadow mb-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
