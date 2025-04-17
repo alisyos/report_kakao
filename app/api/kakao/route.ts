@@ -23,7 +23,9 @@ export async function GET(request: NextRequest) {
         if (!adAccountId) {
           return NextResponse.json({ error: 'adAccountId parameter is required' }, { status: 400 });
         }
+        console.log('API 라우트: 캠페인 조회 요청 - 계정 ID:', adAccountId);
         result = await kakaoAdApi.getCampaigns(adAccountId);
+        console.log('API 라우트: 캠페인 조회 결과:', JSON.stringify(result).substring(0, 200) + '...');
         break;
       case 'adGroups':
         if (!adAccountId) {

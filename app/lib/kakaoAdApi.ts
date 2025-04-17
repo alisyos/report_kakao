@@ -65,9 +65,23 @@ export const getAdAccounts = async () => {
 export const getCampaigns = async (adAccountId: string) => {
   try {
     console.log('캠페인 목록 조회 시도:', adAccountId);
-    const response = await apiClient.get(`/openapi/v1/adAccounts/${adAccountId}/campaigns`);
+    // API 가이드에 맞게 경로 수정 - adAccounts 대신 campaigns 엔드포인트 사용
+    const response = await apiClient.get('/openapi/v1/campaigns', {
+      headers: {
+        'adAccountId': adAccountId
+      }
+    });
     console.log('캠페인 응답 데이터:', response.data);
-    return { data: response.data.content || [] };
+    
+    // 응답 데이터 구조 확인 및 가공
+    // 응답이 배열이면 그대로 사용, content 필드에 있으면 content에서 추출
+    const campaigns = Array.isArray(response.data) 
+      ? response.data 
+      : (response.data?.content || []);
+    
+    console.log(`캠페인 ${campaigns.length}개 추출됨, 첫번째 항목:`, campaigns.length > 0 ? campaigns[0] : '없음');
+    
+    return { data: campaigns };
   } catch (error: any) {
     console.error('캠페인 조회 오류:', error.response?.data || error.message);
     // 임시 테스트 데이터 반환
@@ -84,14 +98,31 @@ export const getCampaigns = async (adAccountId: string) => {
 export const getAdGroups = async (adAccountId: string, campaignId?: string) => {
   try {
     console.log('광고 그룹 목록 조회 시도:', adAccountId, campaignId);
-    let url = `/openapi/v1/adAccounts/${adAccountId}/adGroups`;
+    let url = '/openapi/v1/adGroups';
+    const params: any = {};
+    const headers = {
+      'adAccountId': adAccountId
+    };
+    
     if (campaignId) {
-      url = `/openapi/v1/adAccounts/${adAccountId}/campaigns/${campaignId}/adGroups`;
+      params.campaignId = campaignId;
     }
     
-    const response = await apiClient.get(url);
+    const response = await apiClient.get(url, {
+      headers,
+      params
+    });
+    
     console.log('광고 그룹 응답 데이터:', response.data);
-    return { data: response.data.content || [] };
+    
+    // 응답이 배열이면 그대로 사용, content 필드에 있으면 content에서 추출
+    const adGroups = Array.isArray(response.data) 
+      ? response.data 
+      : (response.data?.content || []);
+    
+    console.log(`광고 그룹 ${adGroups.length}개 추출됨`);
+    
+    return { data: adGroups };
   } catch (error: any) {
     console.error('광고 그룹 조회 오류:', error.response?.data || error.message);
     // 임시 테스트 데이터 반환
@@ -108,9 +139,24 @@ export const getAdGroups = async (adAccountId: string, campaignId?: string) => {
 export const getKeywords = async (adAccountId: string, adGroupId: string) => {
   try {
     console.log('키워드 목록 조회 시도:', adAccountId, adGroupId);
-    const response = await apiClient.get(`/openapi/v1/adAccounts/${adAccountId}/adGroups/${adGroupId}/keywords`);
+    const response = await apiClient.get('/openapi/v1/keywords', {
+      headers: {
+        'adAccountId': adAccountId
+      },
+      params: {
+        adGroupId
+      }
+    });
     console.log('키워드 응답 데이터:', response.data);
-    return { data: response.data.content || [] };
+    
+    // 응답이 배열이면 그대로 사용, content 필드에 있으면 content에서 추출
+    const keywords = Array.isArray(response.data) 
+      ? response.data 
+      : (response.data?.content || []);
+    
+    console.log(`키워드 ${keywords.length}개 추출됨`);
+    
+    return { data: keywords };
   } catch (error: any) {
     console.error('키워드 조회 오류:', error.response?.data || error.message);
     // 임시 테스트 데이터 반환
@@ -213,6 +259,23 @@ export const getCampaignReport = async (
     
     console.log('캠페인 리포트 조회 시도:', adAccountId, campaignIds, startDate, endDate);
     
+    // 먼저 캠페인 정보를 가져와서 ID와 이름을 매핑
+    const campaignsResponse = await apiClient.get('/openapi/v1/campaigns', {
+      headers: {
+        'adAccountId': adAccountId
+      }
+    });
+    // 응답이 배열이면 그대로 사용, content 필드에 있으면 content에서 추출
+    const campaigns = Array.isArray(campaignsResponse.data) 
+      ? campaignsResponse.data 
+      : (campaignsResponse.data?.content || []);
+    
+    // 캠페인 ID를 키로, 이름을 값으로 하는 매핑 생성
+    const campaignNamesMap: Record<string, string> = {};
+    campaigns.forEach((campaign: any) => {
+      campaignNamesMap[campaign.id] = campaign.name;
+    });
+    
     // 문서에 맞게 GET 메서드와 경로 수정
     const response = await apiClient.get('/openapi/v1/campaigns/report', {
       headers: {
@@ -234,10 +297,12 @@ export const getCampaignReport = async (
     const formattedData = reportItems.map((item: any) => {
       const dimensions = item.dimensions || {};
       const metrics = item.metrics || {};
+      const campaignId = dimensions.campaignId || 'unknown';
       
       return {
-        id: dimensions.campaignId || 'unknown',
-        name: `캠페인 ${dimensions.campaignId || 'unknown'}`,
+        id: campaignId,
+        // 캠페인 이름을 매핑에서 가져오거나, 없으면 '캠페인 ID' 형식으로 표시
+        name: campaignNamesMap[campaignId] || `캠페인 ${campaignId}`,
         impressions: metrics.imp || 0,
         clicks: metrics.click || 0,
         ctr: (metrics.ctr || 0) / 100,
@@ -296,8 +361,15 @@ export const getKeywordReport = async (
     console.log('키워드 리포트 조회 시도:', adAccountId, keywordIds, startDate, endDate);
     
     // 캠페인 정보 가져오기
-    const campaignsResponse = await apiClient.get(`/openapi/v1/adAccounts/${adAccountId}/campaigns`);
-    const campaigns = campaignsResponse.data?.content || [];
+    const campaignsResponse = await apiClient.get('/openapi/v1/campaigns', {
+      headers: {
+        'adAccountId': adAccountId
+      }
+    });
+    // 응답이 배열이면 그대로 사용, content 필드에 있으면 content에서 추출
+    const campaigns = Array.isArray(campaignsResponse.data) 
+      ? campaignsResponse.data 
+      : (campaignsResponse.data?.content || []);
     
     if (!campaigns.length) {
       throw new Error('캠페인 정보를 찾을 수 없습니다.');
@@ -306,6 +378,41 @@ export const getKeywordReport = async (
     // 첫 번째 캠페인 ID 사용 (필요한 쿼리 파라미터)
     const campaignId = campaigns[0].id;
     
+    // 광고 그룹 정보 가져오기
+    const adGroupsResponse = await apiClient.get('/openapi/v1/adGroups', {
+      headers: {
+        'adAccountId': adAccountId
+      },
+      params: {
+        campaignId: campaignId
+      }
+    });
+    const adGroups = adGroupsResponse.data?.content || [];
+    
+    if (!adGroups.length) {
+      throw new Error('광고그룹 정보를 찾을 수 없습니다.');
+    }
+    
+    // 첫 번째 광고 그룹 ID 사용
+    const adGroupId = adGroups[0].id;
+    
+    // 키워드 정보 가져오기
+    const keywordsResponse = await apiClient.get('/openapi/v1/keywords', {
+      headers: {
+        'adAccountId': adAccountId
+      },
+      params: {
+        adGroupId: adGroupId
+      }
+    });
+    const keywords = keywordsResponse.data?.content || [];
+    
+    // 키워드 ID를 키로, 키워드 텍스트를 값으로 하는 매핑 생성
+    const keywordNamesMap: Record<string, string> = {};
+    keywords.forEach((keyword: any) => {
+      keywordNamesMap[keyword.id] = keyword.keyword;
+    });
+    
     // 문서에 맞게 GET 메서드와 경로 수정
     const response = await apiClient.get('/openapi/v1/keywords/report', {
       headers: {
@@ -313,6 +420,7 @@ export const getKeywordReport = async (
       },
       params: {
         campaignId,
+        adGroupId,
         start,
         end,
         metricsGroups: metricsGroups.join(',')
@@ -328,10 +436,12 @@ export const getKeywordReport = async (
     const formattedData = reportItems.map((item: any) => {
       const dimensions = item.dimensions || {};
       const metrics = item.metrics || {};
+      const keywordId = dimensions.keywordId || 'unknown';
       
       return {
-        id: dimensions.keywordId || 'unknown',
-        name: `키워드 ${dimensions.keywordId || 'unknown'}`,
+        id: keywordId,
+        // 키워드 텍스트를 매핑에서 가져오거나, 없으면 '키워드 ID' 형식으로 표시
+        name: keywordNamesMap[keywordId] || `키워드 ${keywordId}`,
         impressions: metrics.imp || 0,
         clicks: metrics.click || 0,
         ctr: (metrics.ctr || 0) / 100,

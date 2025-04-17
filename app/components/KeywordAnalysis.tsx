@@ -53,21 +53,36 @@ const KeywordAnalysis = () => {
     const fetchCampaigns = async () => {
       try {
         setLoading(true);
-        setSelectedCampaignId('');
+        setSelectedCampaignId(''); // 캠페인 ID 초기화
         setSelectedAdGroupId('');
         setAdGroups([]);
         setKeywords([]);
         setKeywordReportData([]);
         
+        console.log('캠페인 로드 시작 - 계정 ID:', selectedAccountId);
         const response = await axios.get(`/api/kakao?endpoint=campaigns&adAccountId=${selectedAccountId}`);
-        const result = response.data;
-        setCampaigns(result.data || []);
+        console.log('캠페인 API 응답:', response.data);
         
-        if (result.data && result.data.length > 0) {
-          setSelectedCampaignId(result.data[0].id);
+        // 데이터 구조 확인
+        const result = response.data;
+        const campaignList = result.data || [];
+        console.log('캠페인 목록 데이터:', campaignList);
+        
+        // 유효한 데이터 필터링 (id와 name이 있는 항목만)
+        const validCampaigns = campaignList.filter((camp: any) => camp && camp.id);
+        console.log('유효한 캠페인 수:', validCampaigns.length);
+        
+        setCampaigns(validCampaigns);
+        
+        if (validCampaigns.length > 0) {
+          const firstCampaignId = validCampaigns[0].id;
+          console.log('첫번째 캠페인 ID 설정:', firstCampaignId);
+          setSelectedCampaignId(firstCampaignId);
         }
       } catch (err: any) {
+        console.error('캠페인 로딩 오류:', err);
         setError(err.message || '캠페인을 불러오는 중 오류가 발생했습니다.');
+        setCampaigns([]); // 오류 시 빈 배열로 설정
       } finally {
         setLoading(false);
       }
@@ -79,6 +94,8 @@ const KeywordAnalysis = () => {
   // 선택된 캠페인의 광고 그룹 목록 조회
   useEffect(() => {
     if (!selectedAccountId || !selectedCampaignId) return;
+
+    console.log('캠페인 ID 변경됨, 광고 그룹 조회 시작:', selectedCampaignId);
 
     const fetchAdGroups = async () => {
       try {
@@ -242,17 +259,29 @@ const KeywordAnalysis = () => {
             <select
               id="campaign-select"
               value={selectedCampaignId}
-              onChange={(e) => setSelectedCampaignId(e.target.value)}
+              onChange={(e) => {
+                console.log('캠페인 선택:', e.target.value);
+                setSelectedCampaignId(e.target.value);
+              }}
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              disabled={!selectedAccountId || campaigns.length === 0}
+              disabled={!selectedAccountId}
             >
               <option value="">캠페인을 선택하세요</option>
-              {campaigns.map((campaign) => (
-                <option key={campaign.id} value={campaign.id}>
-                  {campaign.name}
-                </option>
-              ))}
+              {campaigns && campaigns.length > 0 ? (
+                campaigns.map((campaign) => (
+                  <option key={campaign.id} value={campaign.id}>
+                    {campaign.name || `캠페인 ${campaign.id}`}
+                  </option>
+                ))
+              ) : (
+                <option value="" disabled>캠페인이 없습니다</option>
+              )}
             </select>
+            {campaigns && campaigns.length > 0 && (
+              <div className="mt-1 text-xs text-gray-500">
+                {campaigns.length}개의 캠페인이 로드됨
+              </div>
+            )}
           </div>
           
           <div>
