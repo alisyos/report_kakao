@@ -23,6 +23,9 @@ const KeywordAnalysis = () => {
   const [keywords, setKeywords] = useState<any[]>([]);
   const [keywordReportData, setKeywordReportData] = useState<ReportData[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [reportGenerated, setReportGenerated] = useState<boolean>(false);
+  const [generatedLevel, setGeneratedLevel] = useState<'account' | 'campaign' | 'adGroup' | 'keyword' | null>(null);
+  const [dateReportData, setDateReportData] = useState<ReportData[]>([]);
 
   // 광고 계정 목록 조회
   useEffect(() => {
@@ -33,9 +36,10 @@ const KeywordAnalysis = () => {
         const accounts = response.data;
         setAdAccounts(accounts.data || []);
         
-        if (accounts.data && accounts.data.length > 0) {
-          setSelectedAccountId(accounts.data[0].id);
-        }
+        // 자동 선택 제거
+        // if (accounts.data && accounts.data.length > 0) {
+        //   setSelectedAccountId(accounts.data[0].id);
+        // }
       } catch (err: any) {
         setError(err.message || '광고 계정을 불러오는 중 오류가 발생했습니다.');
       } finally {
@@ -74,11 +78,12 @@ const KeywordAnalysis = () => {
         
         setCampaigns(validCampaigns);
         
-        if (validCampaigns.length > 0) {
-          const firstCampaignId = validCampaigns[0].id;
-          console.log('첫번째 캠페인 ID 설정:', firstCampaignId);
-          setSelectedCampaignId(firstCampaignId);
-        }
+        // 자동 선택 제거
+        // if (validCampaigns.length > 0) {
+        //   const firstCampaignId = validCampaigns[0].id;
+        //   console.log('첫번째 캠페인 ID 설정:', firstCampaignId);
+        //   setSelectedCampaignId(firstCampaignId);
+        // }
       } catch (err: any) {
         console.error('캠페인 로딩 오류:', err);
         setError(err.message || '캠페인을 불러오는 중 오류가 발생했습니다.');
@@ -108,9 +113,10 @@ const KeywordAnalysis = () => {
         const result = response.data;
         setAdGroups(result.data || []);
         
-        if (result.data && result.data.length > 0) {
-          setSelectedAdGroupId(result.data[0].id);
-        }
+        // 자동 선택 제거
+        // if (result.data && result.data.length > 0) {
+        //   setSelectedAdGroupId(result.data[0].id);
+        // }
       } catch (err: any) {
         setError(err.message || '광고 그룹을 불러오는 중 오류가 발생했습니다.');
       } finally {
@@ -137,6 +143,8 @@ const KeywordAnalysis = () => {
         if (result.data && result.data.length > 0) {
           // 키워드 리포트 조회
           const keywordIds = result.data.map((keyword: any) => keyword.id);
+          console.log('키워드 리포트 요청 - 키워드 ID 목록:', keywordIds);
+          
           const keywordReportResponse = await axios.post('/api/kakao', {
             endpoint: 'keywordReport',
             adAccountId: selectedAccountId,
@@ -144,22 +152,32 @@ const KeywordAnalysis = () => {
             startDate: dateFilter.startDate,
             endDate: dateFilter.endDate
           });
+          
+          console.log('키워드 리포트 응답:', keywordReportResponse.data);
           const keywordReport = keywordReportResponse.data;
           
           // 키워드 이름 매핑
           const keywordMap = result.data.reduce((acc: any, keyword: any) => {
-            acc[keyword.id] = keyword.keyword;
+            acc[keyword.id] = keyword.keyword || keyword.text;
             return acc;
           }, {});
           
+          // keywordNamesMap이 API 응답에 포함되어 있는 경우 사용
+          const apiKeywordMap = keywordReport.keywordNamesMap || {};
+          const combinedKeywordMap = { ...keywordMap, ...apiKeywordMap };
+          
+          console.log('키워드 매핑:', combinedKeywordMap);
+          
           const reportWithNames = (keywordReport.data || []).map((item: any) => ({
             ...item,
-            name: keywordMap[item.id] || item.id
+            name: combinedKeywordMap[item.id] || (item.dimensions && combinedKeywordMap[item.dimensions.keywordId]) || item.id
           }));
           
+          console.log('최종 키워드 리포트 데이터:', reportWithNames);
           setKeywordReportData(reportWithNames);
         }
       } catch (err: any) {
+        console.error('키워드 데이터 로딩 오류:', err);
         setError(err.message || '키워드를 불러오는 중 오류가 발생했습니다.');
       } finally {
         setLoading(false);
@@ -175,56 +193,71 @@ const KeywordAnalysis = () => {
   );
 
   // 클릭 차트 데이터 준비 (상위 10개)
-  const prepareClicksChartData = (): ChartData => {
+  const prepareClicksChartData = () => {
     const sortedData = [...filteredKeywordData].sort((a, b) => b.clicks - a.clicks).slice(0, 10);
-    return {
-      labels: sortedData.map(item => item.name || ''),
-      datasets: [
-        {
-          label: '클릭수',
-          data: sortedData.map(item => item.clicks),
-          backgroundColor: 'rgba(54, 162, 235, 0.5)',
-          borderColor: 'rgb(54, 162, 235)',
-          borderWidth: 1
-        }
-      ]
-    };
+    return sortedData;
   };
 
   // CTR 차트 데이터 준비 (상위 10개)
-  const prepareCtrChartData = (): ChartData => {
+  const prepareCtrChartData = () => {
     const sortedData = [...filteredKeywordData].sort((a, b) => b.ctr - a.ctr).slice(0, 10);
-    return {
-      labels: sortedData.map(item => item.name || ''),
-      datasets: [
-        {
-          label: 'CTR (%)',
-          data: sortedData.map(item => item.ctr * 100),
-          backgroundColor: 'rgba(255, 205, 86, 0.5)',
-          borderColor: 'rgb(255, 205, 86)',
-          borderWidth: 1
-        }
-      ]
-    };
+    return sortedData;
   };
 
   // 전환율 차트 데이터 준비 (상위 10개)
-  const prepareConversionRateChartData = (): ChartData => {
+  const prepareConversionRateChartData = () => {
     const sortedData = [...filteredKeywordData]
       .sort((a, b) => b.conversionRate - a.conversionRate)
       .slice(0, 10);
-    return {
-      labels: sortedData.map(item => item.name || ''),
-      datasets: [
-        {
-          label: '전환율 (%)',
-          data: sortedData.map(item => item.conversionRate * 100),
-          backgroundColor: 'rgba(75, 192, 192, 0.5)',
-          borderColor: 'rgb(75, 192, 192)',
-          borderWidth: 1
-        }
-      ]
-    };
+    return sortedData;
+  };
+
+  // 리포트 생성 함수
+  const generateReport = async () => {
+    if (!selectedAccountId) {
+      setError('광고 계정을 선택해주세요.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      
+      let endpoint = 'accountReport';
+      let params = {
+        adAccountId: selectedAccountId,
+        startDate: dateFilter.startDate,
+        endDate: dateFilter.endDate,
+        timeUnit: 'DAY',
+        metricsGroups: ['BASIC']
+      };
+      
+      console.log(`리포트 생성 요청 - 계정: ${selectedAccountId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
+      
+      // API 호출
+      const response = await axios.post('/api/kakao', {
+        endpoint,
+        ...params
+      });
+      
+      console.log('API 응답:', response.data);
+      
+      if (response.data && response.data.data) {
+        // API 원본 데이터를 그대로 설정
+        setDateReportData(response.data.data);
+        setGeneratedLevel('account');
+        setReportGenerated(true);
+      } else {
+        setError('리포트 데이터를 불러오는데 실패했습니다.');
+        setReportGenerated(false);
+      }
+    } catch (err: any) {
+      console.error('리포트 생성 오류:', err);
+      setError(err.message || '리포트를 생성하는 중 오류가 발생했습니다.');
+      setReportGenerated(false);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -319,12 +352,24 @@ const KeywordAnalysis = () => {
           </div>
         </div>
         
-        <div className="mt-4">
-          <DateRangePicker
-            onChange={setDateFilter}
-            initialStartDate={dateFilter.startDate}
-            initialEndDate={dateFilter.endDate}
-          />
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="col-span-2">
+            <DateRangePicker
+              onChange={setDateFilter}
+              initialStartDate={dateFilter.startDate}
+              initialEndDate={dateFilter.endDate}
+            />
+          </div>
+          
+          <div className="flex items-end">
+            <button
+              onClick={generateReport}
+              disabled={!selectedAccountId || loading}
+              className="w-full p-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-blue-300"
+            >
+              {loading ? '처리 중...' : '리포트 생성'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -340,41 +385,77 @@ const KeywordAnalysis = () => {
         </div>
       )}
 
-      {!loading && !error && filteredKeywordData.length > 0 && (
+      {reportGenerated && !loading && !error && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-            <div className="bg-white p-4 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">클릭수 상위 키워드</h3>
-              <ReportChart type="bar" data={prepareClicksChartData()} height={300} />
+          <div className="bg-white p-4 rounded-lg shadow mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-800">
+              {generatedLevel === 'account' && '계정 레벨 리포트'}
+              {generatedLevel === 'campaign' && '캠페인 레벨 리포트'}
+              {generatedLevel === 'adGroup' && '광고 그룹 레벨 리포트'}
+              {generatedLevel === 'keyword' && '키워드 레벨 리포트'}
+            </h2>
+            
+            <div className="mb-6">
+              <h3 className="text-lg font-medium mb-3 text-gray-700">일자별 성과</h3>
+              <pre className="bg-gray-100 p-2 text-xs mb-2 overflow-auto">{`dateReportData 개수: ${dateReportData.length}`}</pre>
+              <ReportTable data={dateReportData} title="일자별 데이터" />
+              
+              {dateReportData.length > 0 && (
+                <div className="mt-6">
+                  <h3 className="text-lg font-medium mb-3 text-gray-700">일자별 추이 그래프</h3>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div className="bg-white p-4 rounded-lg shadow">
+                      <h4 className="text-base font-medium mb-2 text-gray-700">클릭 & 노출 추이</h4>
+                      <ReportChart 
+                        data={dateReportData}
+                        title="클릭 & 노출 추이"
+                        metrics={['imp', 'click']}
+                      />
+                    </div>
+                    
+                    <div className="bg-white p-4 rounded-lg shadow">
+                      <h4 className="text-base font-medium mb-2 text-gray-700">비용 & 전환 추이</h4>
+                      <ReportChart 
+                        data={dateReportData}
+                        title="비용 & 전환 추이"
+                        metrics={['spending', 'conversion']}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="bg-white p-4 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">CTR 상위 키워드</h3>
-              <ReportChart type="bar" data={prepareCtrChartData()} height={300} />
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">전환율 상위 키워드</h3>
-              <ReportChart type="bar" data={prepareConversionRateChartData()} height={300} />
-            </div>
-          </div>
+            
+            {generatedLevel === 'keyword' && filteredKeywordData.length > 0 && (
+              <>
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
+                  <div className="bg-white p-4 rounded-lg shadow">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">클릭수 상위 키워드</h3>
+                    <ReportChart data={prepareClicksChartData()} title="클릭수 상위 키워드" />
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">CTR 상위 키워드</h3>
+                    <ReportChart data={prepareCtrChartData()} title="CTR 상위 키워드" />
+                  </div>
+                  <div className="bg-white p-4 rounded-lg shadow">
+                    <h3 className="text-lg font-semibold text-gray-800 mb-4">전환율 상위 키워드</h3>
+                    <ReportChart data={prepareConversionRateChartData()} title="전환율 상위 키워드" />
+                  </div>
+                </div>
 
-          <div className="mb-8">
-            <ReportTable data={filteredKeywordData} title="키워드별 상세 성과" />
+                <div className="mb-8">
+                  <ReportTable data={filteredKeywordData} title="키워드별 상세 성과" />
+                </div>
+              </>
+            )}
           </div>
         </>
       )}
 
-      {!loading && !error && filteredKeywordData.length === 0 && keywords.length > 0 && (
-        <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
-          <p className="text-yellow-700">
-            선택한 기간 동안 키워드 성과 데이터가 없습니다. 다른 기간을 선택하거나 다른 광고 그룹을 선택해 보세요.
-          </p>
-        </div>
-      )}
-
-      {!loading && !error && (!selectedAdGroupId || keywords.length === 0) && (
+      {!loading && !error && !reportGenerated && (
         <div className="bg-blue-50 border-l-4 border-blue-400 p-4">
           <p className="text-blue-700">
-            광고 계정, 캠페인, 광고 그룹을 선택하면 키워드 분석 데이터를 확인할 수 있습니다.
+            광고 계정을 선택하고 리포트 생성 버튼을 클릭하면 리포트 데이터를 확인할 수 있습니다.
           </p>
         </div>
       )}

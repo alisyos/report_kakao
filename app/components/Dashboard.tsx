@@ -55,11 +55,82 @@ const Dashboard = () => {
           endpoint: 'accountReport',
           adAccountId: selectedAccountId,
           startDate: dateFilter.startDate,
-          endDate: dateFilter.endDate
+          endDate: dateFilter.endDate,
+          timeUnit: 'DAY'  // DAY 단위 지정
         });
         
+        console.log('계정 리포트 API 응답:', accountReportResponse);
+        
         if (accountReportResponse.data && accountReportResponse.data.data) {
-          setReportData(accountReportResponse.data.data || []);
+          const rawReportData = accountReportResponse.data.data || [];
+          console.log('계정 리포트 원본 데이터:', rawReportData.slice(0, 2));
+
+          // API 응답 형식을 컴포넌트에서 사용하는 형식으로 변환
+          const reportDataFromApi = rawReportData.map((item: any) => {
+            const transformed = {
+              id: `account-${item.start}`,
+              name: item.start,
+              date: item.start,
+              accountId: item.dimensions?.adAccountId || selectedAccountId,
+              // metrics 필드에서 값 추출
+              impressions: item.metrics?.imp || 0,
+              clicks: item.metrics?.click || 0,
+              ctr: (item.metrics?.ctr || 0) / 100, // 백분율로 변환 필요한 경우
+              cpc: 0, // API에서 제공하지 않음
+              cost: item.metrics?.spending || 0,
+              conversions: 0, // API에서 제공하지 않음
+              conversionRate: 0, // API에서 제공하지 않음
+              costPerConversion: 0, // API에서 제공하지 않음
+              conversionValue: 0, // API에서 제공하지 않음
+              roas: 0 // API에서 제공하지 않음
+            };
+            console.log('변환된 항목:', transformed);
+            return transformed;
+          });
+
+          console.log('변환된 리포트 데이터:', reportDataFromApi.slice(0, 2));
+          
+          // 데이터가 배열로 오므로 각 날짜별 데이터를 집계하여 사용
+          // 날짜별로 분리된 데이터를 하나의 요약 데이터로 계산
+          if (reportDataFromApi.length > 0) {
+            // 지표 합계 계산
+            const totalImpressions = reportDataFromApi.reduce((sum: number, item: any) => sum + (item.impressions || 0), 0);
+            const totalClicks = reportDataFromApi.reduce((sum: number, item: any) => sum + (item.clicks || 0), 0);
+            const totalCost = reportDataFromApi.reduce((sum: number, item: any) => sum + (item.cost || 0), 0);
+            
+            // CTR 계산 (클릭 / 노출)
+            const avgCtr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+            
+            // 전환 관련 지표는 'BASIC' 지표에 없으므로 0으로 설정
+            
+            // 요약 데이터 생성
+            const summaryData = {
+              id: 'summary',
+              name: '전체 기간 요약',
+              date: '',
+              accountId: selectedAccountId,
+              impressions: totalImpressions,
+              clicks: totalClicks,
+              ctr: avgCtr,
+              cpc: totalClicks > 0 ? totalCost / totalClicks : 0,
+              cost: totalCost,
+              conversions: 0,
+              conversionRate: 0,
+              costPerConversion: 0,
+              conversionValue: 0,
+              roas: 0
+            };
+            
+            console.log('요약 데이터:', summaryData);
+            
+            // 원본 일별 데이터와 함께 요약 데이터 저장
+            const finalReportData = [summaryData, ...reportDataFromApi];
+            console.log('최종 데이터 (처음 3개):', finalReportData.slice(0, 3));
+            
+            setReportData(finalReportData);
+          } else {
+            setReportData([]);
+          }
         } else {
           setReportData([]);
           console.warn('계정 리포트 데이터 형식이 예상과 다릅니다:', accountReportResponse.data);
@@ -293,11 +364,17 @@ const Dashboard = () => {
               <p className="text-3xl font-bold text-blue-600">
                 {(reportData[0]?.impressions || 0).toLocaleString('ko-KR')}
               </p>
+              <p className="text-sm text-gray-500 mt-2">
+                {`${dateFilter.startDate} ~ ${dateFilter.endDate}`}
+              </p>
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold text-gray-800 mb-2">총 클릭수</h3>
               <p className="text-3xl font-bold text-green-600">
                 {(reportData[0]?.clicks || 0).toLocaleString('ko-KR')}
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                {`${dateFilter.startDate} ~ ${dateFilter.endDate}`}
               </p>
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
@@ -305,11 +382,17 @@ const Dashboard = () => {
               <p className="text-3xl font-bold text-red-600">
                 ₩{(reportData[0]?.cost || 0).toLocaleString('ko-KR')}
               </p>
+              <p className="text-sm text-gray-500 mt-2">
+                {`${dateFilter.startDate} ~ ${dateFilter.endDate}`}
+              </p>
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold text-gray-800 mb-2">평균 CTR</h3>
               <p className="text-3xl font-bold text-purple-600">
                 {((reportData[0]?.ctr || 0) * 100).toFixed(2)}%
+              </p>
+              <p className="text-sm text-gray-500 mt-2">
+                {`${dateFilter.startDate} ~ ${dateFilter.endDate}`}
               </p>
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
@@ -317,13 +400,25 @@ const Dashboard = () => {
               <p className="text-3xl font-bold text-yellow-600">
                 {(reportData[0]?.conversions || 0).toLocaleString('ko-KR')}
               </p>
+              <p className="text-sm text-gray-500 mt-2">
+                {`${dateFilter.startDate} ~ ${dateFilter.endDate}`}
+              </p>
             </div>
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold text-gray-800 mb-2">ROAS</h3>
               <p className="text-3xl font-bold text-indigo-600">
                 {((reportData[0]?.roas || 0) * 100).toFixed(2)}%
               </p>
+              <p className="text-sm text-gray-500 mt-2">
+                {`${dateFilter.startDate} ~ ${dateFilter.endDate}`}
+              </p>
             </div>
+          </div>
+
+          {/* 일별 데이터 표시 */}
+          <div className="bg-white p-4 rounded-lg shadow mb-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">일별 성과</h3>
+            <ReportTable data={reportData.slice(1)} title="일별 데이터" />
           </div>
 
           {campaignReportData.length > 0 && (
@@ -350,4 +445,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

@@ -1,178 +1,107 @@
 'use client';
 
-import { useState } from 'react';
-import { ReportData } from '../lib/types';
+import React from 'react';
+
+// 간단하게 작성된 ReportTable 컴포넌트
+// API 응답의 원본 필드(imp, click, spending)를 사용합니다
 
 interface ReportTableProps {
-  data: ReportData[];
+  data: any[];
   title?: string;
 }
 
-const ReportTable = ({ data, title = '성과 리포트' }: ReportTableProps) => {
-  const [sortField, setSortField] = useState<keyof ReportData>('impressions');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-
-  // 데이터가 비어있으면 빈 테이블 렌더링
+const ReportTable: React.FC<ReportTableProps> = ({ data, title = '리포트' }) => {
+  // 디버깅용 로그
+  console.log('ReportTable 데이터:', data);
+  
   if (!data || data.length === 0) {
-    return (
-      <div className="overflow-x-auto bg-white rounded-lg shadow p-4">
-        <h2 className="text-lg font-semibold text-gray-800 mb-2">{title}</h2>
-        <p className="text-gray-500">표시할 데이터가 없습니다.</p>
-      </div>
-    );
+    return <div className="text-center p-4">데이터가 없습니다.</div>;
   }
 
-  // 정렬 핸들러
-  const handleSort = (field: keyof ReportData) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('desc');
-    }
-  };
+  // 첫 번째 데이터의 모든 키 추출
+  const firstItem = data[0];
+  console.log('첫 번째 항목:', firstItem);
 
-  // 데이터 정렬
-  const sortedData = [...data].sort((a, b) => {
-    const aValue = a[sortField] as any;
-    const bValue = b[sortField] as any;
+  // 메트릭스 데이터 확인
+  const metrics = firstItem.metrics || {};
+  console.log('메트릭스 데이터:', metrics);
 
-    if (aValue === bValue) return 0;
-    
-    const compareResult = aValue < bValue ? -1 : 1;
-    return sortDirection === 'asc' ? compareResult : -compareResult;
-  });
-
+  // 데이터 날짜 또는 ID 정보
+  const dateOrId = firstItem.start || firstItem.id || '';
+  console.log('날짜/ID 데이터:', dateOrId);
+  
   // 숫자 포맷팅 함수
-  const formatNumber = (value: number): string => {
-    return value?.toLocaleString('ko-KR') || '0';
+  const formatNumber = (num: any) => {
+    if (typeof num === 'undefined' || num === null) return '-';
+    if (typeof num === 'string') {
+      num = parseFloat(num) || 0;
+    }
+    return new Intl.NumberFormat('ko-KR').format(num);
   };
 
-  // 비율 포맷팅 함수 (예: CTR, 전환율)
-  const formatPercent = (value: number): string => {
-    return `${((value || 0) * 100).toFixed(2)}%`;
+  // 비용 포맷팅 함수
+  const formatCurrency = (amount: any) => {
+    if (typeof amount === 'undefined' || amount === null) return '-';
+    if (typeof amount === 'string') {
+      amount = parseFloat(amount) || 0;
+    }
+    return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
   };
 
-  // 금액 포맷팅 함수
-  const formatCurrency = (value: number): string => {
-    return `₩${(value || 0).toLocaleString('ko-KR')}`;
+  // 퍼센트 포맷팅 함수
+  const formatPercent = (value: any) => {
+    if (typeof value === 'undefined' || value === null) return '-';
+    return (parseFloat(value) * 100).toFixed(2) + '%';
   };
 
   return (
-    <div className="overflow-x-auto bg-white rounded-lg shadow">
-      <div className="p-4 border-b border-gray-200">
-        <h2 className="text-lg font-semibold text-gray-800">{title}</h2>
-      </div>
+    <div className="overflow-x-auto">
+      <h3 className="text-lg font-semibold mb-2">{title}</h3>
+      
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            {data[0]?.name && (
-              <th
-                className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-                onClick={() => handleSort('name')}
-              >
-                이름
-                {sortField === 'name' && (
-                  <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                )}
-              </th>
-            )}
-            <th
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => handleSort('impressions')}
-            >
-              노출수
-              {sortField === 'impressions' && (
-                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-              )}
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              날짜
             </th>
-            <th
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => handleSort('clicks')}
-            >
-              클릭수
-              {sortField === 'clicks' && (
-                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-              )}
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              노출(IMP)
             </th>
-            <th
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => handleSort('ctr')}
-            >
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              클릭(CLICK)
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              비용(SPENDING)
+            </th>
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               CTR
-              {sortField === 'ctr' && (
-                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-              )}
             </th>
-            <th
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => handleSort('cpc')}
-            >
+            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
               CPC
-              {sortField === 'cpc' && (
-                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-            <th
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => handleSort('cost')}
-            >
-              비용
-              {sortField === 'cost' && (
-                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-            <th
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => handleSort('conversions')}
-            >
-              전환수
-              {sortField === 'conversions' && (
-                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-            <th
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => handleSort('conversionRate')}
-            >
-              전환율
-              {sortField === 'conversionRate' && (
-                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-            <th
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => handleSort('costPerConversion')}
-            >
-              전환당 비용
-              {sortField === 'costPerConversion' && (
-                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-              )}
-            </th>
-            <th
-              className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer"
-              onClick={() => handleSort('roas')}
-            >
-              ROAS
-              {sortField === 'roas' && (
-                <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-              )}
             </th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {sortedData.map((item, index) => (
-            <tr key={item.id || index} className="hover:bg-gray-50">
-              {item.name && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.name}</td>}
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatNumber(item.impressions)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatNumber(item.clicks)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatPercent(item.ctr)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(item.cpc)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(item.cost)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatNumber(item.conversions)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatPercent(item.conversionRate)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatCurrency(item.costPerConversion)}</td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatPercent(item.roas)}</td>
+          {data.map((item, index) => (
+            <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {item.date || item.start || ''}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {formatNumber(item.imp || item.metrics?.imp)}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {formatNumber(item.click || item.metrics?.click)}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {formatCurrency(item.spending || item.metrics?.spending)}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {formatPercent(item.ctr)}
+              </td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {item.cpc ? formatCurrency(item.cpc) : '-'}
+              </td>
             </tr>
           ))}
         </tbody>

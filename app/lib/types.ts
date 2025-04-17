@@ -69,6 +69,12 @@ export interface ReportData extends BasicMetrics, ConversionMetrics {
   id: string;
   name?: string;
   date?: string;
+  type?: string;
+  
+  // API 원래 필드 이름들
+  imp?: number;
+  click?: number;
+  spending?: number;
 }
 
 // 리포트 응답 타입

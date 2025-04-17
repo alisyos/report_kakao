@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { endpoint, adAccountId, campaignIds, keywordIds, startDate, endDate, metricsGroups } = body;
+    const { endpoint, adAccountId, campaignIds, adGroupIds, keywordIds, startDate, endDate, metricsGroups = ['BASIC'], timeUnit = 'DAY' } = body;
 
     if (!endpoint || !adAccountId) {
       return NextResponse.json(
@@ -65,27 +65,38 @@ export async function POST(request: NextRequest) {
     // 날짜 준비
     const start = startDate || getDefaultStartDate();
     const end = endDate || getDefaultEndDate();
-    const metrics = metricsGroups || ['BASIC'];
+    
+    // 명시적으로 metricsGroups 확인
+    const metrics = Array.isArray(metricsGroups) ? metricsGroups : ['BASIC'];
+    console.log(`API 요청 파라미터 - metricsGroups:`, metrics);
 
     let result;
 
     switch (endpoint) {
       case 'accountReport':
-        console.log(`계정 리포트 조회: ${adAccountId} ${start} ~ ${end}`);
-        result = await kakaoAdApi.getAccountReport(adAccountId, start, end, metrics);
+        console.log(`계정 리포트 조회: ${adAccountId} ${start} ~ ${end}, 지표:`, metrics);
+        result = await kakaoAdApi.getAccountReport(adAccountId, start, end, metrics, timeUnit);
         break;
       case 'campaignReport':
         // 캠페인 리포트의 경우 캠페인 ID가 필요하지만, 새 API는 필요하지 않음
         // 헤더에 adAccountId를 넣고 호출함
-        console.log(`캠페인 리포트 조회: ${adAccountId} ${start} ~ ${end}`);
-        result = await kakaoAdApi.getCampaignReport(adAccountId, campaignIds || [], start, end, metrics);
+        console.log(`캠페인 리포트 조회: ${adAccountId} ${start} ~ ${end} (${timeUnit})`);
+        result = await kakaoAdApi.getCampaignReport(adAccountId, campaignIds || [], start, end, metrics, timeUnit);
+        break;
+      case 'adGroupReport':
+        if (!adGroupIds || !adGroupIds.length) {
+          return NextResponse.json({ error: 'adGroupIds parameter is required' }, { status: 400 });
+        }
+        console.log(`광고 그룹 리포트 조회: ${adAccountId} ${start} ~ ${end} (${timeUnit})`);
+        // 임시로 캠페인 리포트 함수를 사용합니다 (실제로는 광고 그룹 리포트 API 사용)
+        result = await kakaoAdApi.getCampaignReport(adAccountId, campaignIds || [], start, end, metrics, timeUnit);
         break;
       case 'keywordReport':
         if (!keywordIds || !keywordIds.length) {
           return NextResponse.json({ error: 'keywordIds parameter is required' }, { status: 400 });
         }
-        console.log(`키워드 리포트 조회: ${adAccountId} ${start} ~ ${end}`);
-        result = await kakaoAdApi.getKeywordReport(adAccountId, keywordIds, start, end, metrics);
+        console.log(`키워드 리포트 조회: ${adAccountId} ${start} ~ ${end} (${timeUnit})`);
+        result = await kakaoAdApi.getKeywordReport(adAccountId, keywordIds, start, end, metrics, timeUnit);
         break;
       default:
         return NextResponse.json({ error: 'Invalid endpoint parameter' }, { status: 400 });
