@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: kakao-ad-report
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: KAKAO_API_KEY
+        sync: false
+      - key: KAKAO_ACCESS_TOKEN
+        sync: false 
