@@ -272,18 +272,47 @@ const KeywordAnalysis = () => {
       
       if (response.data && response.data.data) {
         // API 원본 데이터를 그대로 설정
-        setDateReportData(response.data.data);
+        let reportData = response.data.data;
         
-        // 선택된 레벨에 따라 generatedLevel 설정
-        let level: 'account' | 'campaign' | 'adGroup' | 'keyword' = 'account';
-        if (selectedAdGroupId) {
-          level = 'adGroup';
-        } else if (selectedCampaignId) {
-          level = 'campaign';
+        // 광고 그룹 리포트일 경우에만 선택한 광고 그룹의 데이터만 필터링
+        if (endpoint === 'adGroupReport' && selectedAdGroupId) {
+          console.log(`광고 그룹 리포트 필터링 시도 - 선택된 광고 그룹 ID: ${selectedAdGroupId}`);
+          console.log('광고 그룹 리포트 원본 데이터:', reportData.slice(0, 2));
+          
+          // 원본 데이터의 구조를 확인하고 필터링
+          reportData = reportData.filter((item: any) => {
+            // dimensions.adGroupId 또는 adGroupId를 확인
+            const dimensions = item.dimensions || {};
+            const adGroupId = dimensions.adGroupId ? String(dimensions.adGroupId) : 
+                             (item.adGroupId ? String(item.adGroupId) : '');
+            
+            const isMatch = adGroupId === selectedAdGroupId;
+            console.log(`아이템 검사: ${adGroupId} vs ${selectedAdGroupId} -> ${isMatch ? '일치' : '불일치'}`);
+            return isMatch;
+          });
+          
+          console.log(`필터링 후 광고 그룹 리포트 데이터: ${reportData.length}개 항목`);
         }
         
-        setGeneratedLevel(level);
-        setReportGenerated(true);
+        // 데이터가 비어있는지 확인
+        if (reportData.length === 0) {
+          console.log('경고: 리포트 데이터가 비어 있습니다.');
+          setError('선택한 기간에 대한 데이터가 없습니다.');
+          setReportGenerated(false);
+        } else {
+          setDateReportData(reportData);
+          
+          // 선택된 레벨에 따라 generatedLevel 설정
+          let level: 'account' | 'campaign' | 'adGroup' | 'keyword' = 'account';
+          if (selectedAdGroupId) {
+            level = 'adGroup';
+          } else if (selectedCampaignId) {
+            level = 'campaign';
+          }
+          
+          setGeneratedLevel(level);
+          setReportGenerated(true);
+        }
       } else {
         setError('리포트 데이터를 불러오는데 실패했습니다.');
         setReportGenerated(false);

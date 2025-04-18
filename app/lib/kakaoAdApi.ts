@@ -513,7 +513,31 @@ export const getAdGroupReport = async (
     
     // 응답 매핑 처리
     const reportItems = response.data?.data || [];
-    console.log('광고 그룹 리포트 세부 데이터:', JSON.stringify(reportItems.slice(0, 2)));
+    console.log('광고 그룹 리포트 원본 데이터 개수:', reportItems.length);
+    if (reportItems.length > 0) {
+      console.log('광고 그룹 리포트 첫 번째 항목:', JSON.stringify(reportItems[0]));
+    }
+    
+    // adGroupIds로 필터링
+    let filteredItems = reportItems;
+    if (adGroupIds && adGroupIds.length > 0) {
+      const adGroupIdSet = new Set(adGroupIds.map(id => String(id)));
+      console.log(`필터링할 광고 그룹 ID: ${Array.from(adGroupIdSet).join(', ')}`);
+      
+      filteredItems = reportItems.filter((item: any) => {
+        const dimensions = item.dimensions || {};
+        const adGroupId = dimensions.adGroupId ? String(dimensions.adGroupId) : '';
+        const isIncluded = adGroupIdSet.has(adGroupId);
+        
+        if (!isIncluded) {
+          console.log(`광고 그룹 필터링: ${adGroupId} (일치하지 않음)`);
+        }
+        
+        return isIncluded;
+      });
+      
+      console.log(`필터링 후 광고 그룹 리포트 데이터: ${filteredItems.length}개`);
+    }
     
     // 이름 매핑을 위해 광고 그룹 데이터 조회 (필요한 경우에만)
     let adGroupNamesMap: Record<string, string> = {};
@@ -540,7 +564,7 @@ export const getAdGroupReport = async (
     }
     
     // 응용 프로그램에서 사용하는 형식으로 변환
-    const formattedData = reportItems.map((item: any) => {
+    const formattedData = filteredItems.map((item: any) => {
       const dimensions = item.dimensions || {};
       const metrics = item.metrics || {};
       const adGroupId = dimensions.adGroupId || 'unknown';
@@ -559,18 +583,21 @@ export const getAdGroupReport = async (
         id: reportDate ? `${adGroupId}-${reportDate}` : adGroupId,
         name: reportDate || adGroupNamesMap[adGroupId] || `광고 그룹 ${adGroupId}`,
         date: reportDate,
+        adGroupId: adGroupId,
         adGroupName: adGroupNamesMap[adGroupId] || `광고 그룹 ${adGroupId}`,
+        campaignId: campaignId,
+        
         // API 원본 필드 이름과 값 유지
         imp: metrics.imp ? parseInt(metrics.imp) : 0,
         click: metrics.click ? parseInt(metrics.click) : 0,
-        spending: metrics.spending ? parseInt(metrics.spending) : 0,
+        spending: metrics.spending ? (typeof metrics.spending === 'string' ? parseFloat(metrics.spending) : metrics.spending) : 0,
         
         // 다른 필드도 유지
         impressions: metrics.imp ? parseInt(metrics.imp) : 0,
         clicks: metrics.click ? parseInt(metrics.click) : 0,
         ctr: (metrics.ctr || 0) / 100,
         cpc: metrics.ppc || 0,
-        cost: metrics.spending ? parseInt(metrics.spending) : 0,
+        cost: metrics.spending ? (typeof metrics.spending === 'string' ? parseFloat(metrics.spending) : metrics.spending) : 0,
         conversions: metrics.convPurchase1d || 0,
         conversionRate: (metrics.convPurchase1d && metrics.click) ? 
                        (metrics.convPurchase1d / metrics.click) : 0,
@@ -598,7 +625,9 @@ export const getAdGroupReport = async (
         id: `${id}-${dateStr}`,
         name: dateStr,
         date: dateStr,
+        adGroupId: id,
         adGroupName: `테스트 광고 그룹 ${index + 1}`,
+        campaignId: campaignId || '',
         imp: 25000 * multiplier,
         click: 1200 * multiplier,
         spending: 720000 * multiplier,
