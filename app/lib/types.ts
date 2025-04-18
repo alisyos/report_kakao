@@ -103,5 +103,8 @@ export interface ChartData {
     borderColor?: string;
     borderWidth?: number;
     fill?: boolean;
+    yAxisID?: string;
+    tension?: number;
+    hidden?: boolean;
   }[];
 } 

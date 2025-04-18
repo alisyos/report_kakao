@@ -10,7 +10,7 @@ const Navigation = () => {
 
   const navItems = [
     { name: '대시보드', path: '/' },
-    { name: '키워드 분석', path: '/keyword-analysis' },
+    { name: '광고 리포트', path: '/keyword-analysis' },
   ];
 
   const isActive = (path: string) => pathname === path;
