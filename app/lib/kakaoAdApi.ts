@@ -772,75 +772,213 @@ export async function getKeywordReport(
   startDate: string,
   endDate: string,
   metricsGroups: string[] = ['BASIC'],
-  timeUnit: string = 'DAY'
+  timeUnit: string = 'DAY',
+  campaignId?: string,
+  adGroupId?: string
 ): Promise<any> {
   try {
-    console.log('키워드 리포트 요청:', { adAccountId, keywordIds, startDate, endDate, metricsGroups, timeUnit });
+    console.log('키워드 리포트 요청:', { adAccountId, keywordIds, startDate, endDate, metricsGroups, timeUnit, campaignId, adGroupId });
     
-    // 인증 헤더 가져오기
-    const headers = getAuthHeaders(adAccountId);
+    if (!keywordIds || keywordIds.length === 0) {
+      throw new Error('키워드 ID가 제공되지 않았습니다.');
+    }
+    
+    if (!campaignId) {
+      throw new Error('캠페인 ID는 키워드 리포트 조회에 필수 파라미터입니다.');
+    }
     
     // 날짜 형식 변환 (YYYY-MM-DD → YYYYMMDD)
     const formattedStartDate = startDate.replace(/-/g, '');
     const formattedEndDate = endDate.replace(/-/g, '');
     
+    // 인증 헤더 가져오기
+    const headers = getAuthHeaders(adAccountId);
+    
     // 키워드 정보 가져오기 시도
     const keywordNamesMap: Record<string, string> = {};
     try {
-      console.log('키워드 정보 조회 시도...');
-      // 첫 번째 광고그룹 ID를 이용해 키워드 정보 조회
       if (keywordIds.length > 0) {
-        const keywordResponse = await fetch(`/openapi/v1/keywords?ids=${keywordIds.join(',')}`, {
-          headers: headers
+        console.log('키워드 정보 조회 시도:', keywordIds);
+        
+        // API 호출하여 키워드 정보 가져오기
+        const keywordResponse = await apiClient({
+          method: 'GET',
+          url: '/openapi/v1/keywords',
+          headers: headers,
+          params: {
+            keywordIds: keywordIds.join(','),
+            campaignId,
+            adGroupId
+          }
         });
         
-        if (keywordResponse.ok) {
-          const keywordData = await keywordResponse.json();
-          console.log('키워드 정보 조회 성공:', keywordData);
-          
-          // 키워드 ID → 텍스트 매핑 생성
-          if (keywordData && Array.isArray(keywordData)) {
-            keywordData.forEach((keyword: any) => {
-              if (keyword.id && keyword.text) {
-                keywordNamesMap[keyword.id] = keyword.text;
-              }
-            });
+        const keywordData = Array.isArray(keywordResponse.data) 
+          ? keywordResponse.data 
+          : (keywordResponse.data?.content || []);
+        
+        console.log('키워드 정보 조회 성공:', keywordData);
+        
+        // 키워드 ID → 텍스트 매핑 생성
+        keywordData.forEach((keyword: any) => {
+          if (keyword.id) {
+            keywordNamesMap[keyword.id] = keyword.keyword || keyword.text || `키워드 ${keyword.id}`;
           }
-        } else {
-          console.warn('키워드 정보 조회 실패:', keywordResponse.status);
-        }
+        });
+        
+        console.log('키워드 이름 매핑:', keywordNamesMap);
       }
     } catch (error) {
       console.error('키워드 정보 조회 중 오류:', error);
     }
     
-    // 키워드 리포트 API 호출
-    console.log('키워드 리포트 API 호출 시작...');
-    const response = await fetch(`/openapi/v1/keywords/report`, {
-      headers: headers,
-      method: 'GET',
-      cache: 'no-store',
-      next: { revalidate: 0 },
-    });
+    // 요청 파라미터 구성
+    const params: any = {
+      campaignId: campaignId, // 필수 파라미터
+      start: formattedStartDate,
+      end: formattedEndDate,
+      metricsGroups: metricsGroups.join(',')
+    };
     
-    // 상태 코드 확인
-    console.log('키워드 리포트 API 응답 상태:', response.status);
-    
-    if (!response.ok) {
-      throw new Error(`키워드 리포트 API 오류: ${response.status}`);
+    // 키워드 ID 파라미터 추가
+    if (keywordIds && keywordIds.length > 0) {
+      params.keywordIds = keywordIds.join(',');
     }
     
-    const data = await response.json();
-    console.log('키워드 리포트 API 응답:', data);
+    // 광고 그룹 ID 추가 (선택 사항)
+    if (adGroupId) {
+      params.adGroupId = adGroupId;
+    }
     
-    // 응답 데이터 형식 확인 및 가공
-    const formattedData = formatReportData(data, keywordNamesMap);
-    return formattedData;
+    // 날짜별 데이터가 필요한 경우에만 timeUnit 추가
+    if (timeUnit !== 'NONE') {
+      params.timeUnit = timeUnit;
+    }
     
+    console.log('키워드 리포트 API 요청 파라미터:', params);
+    
+    // 키워드 리포트 API 호출
+    const response = await apiClient({
+      method: 'GET',
+      url: '/openapi/v1/keywords/report',
+      headers: headers,
+      params: params
+    });
+    
+    console.log('키워드 리포트 API 응답 상태:', response.status);
+    
+    if (response.status >= 200 && response.status < 300) {
+      const data = response.data;
+      console.log('키워드 리포트 API 응답:', JSON.stringify(data).substring(0, 200) + '...');
+      
+      // 응답 데이터 형식화
+      const formattedData = formatKeywordReportData(data, keywordNamesMap, keywordIds);
+      console.log('최종 키워드 리포트 데이터:', JSON.stringify(formattedData).substring(0, 200) + '...');
+      return formattedData;
+    } else {
+      throw new Error(`키워드 리포트 API 오류: ${response.status}`);
+    }
   } catch (error) {
     console.error('키워드 리포트 가져오기 오류:', error);
-    // 에러 발생 시 테스트 데이터 반환 (개발 중에만 사용)
+    // 에러 발생 시 테스트 데이터 반환
     return getTestKeywordReport(keywordIds, startDate, endDate);
+  }
+}
+
+// 키워드 리포트 데이터 형식화 함수
+function formatKeywordReportData(data: any, keywordNamesMap: Record<string, string>, keywordIds: string[]) {
+  try {
+    // 응답 매핑 처리
+    const reportItems = data?.data || [];
+    console.log('키워드 리포트 원본 데이터 개수:', reportItems.length);
+    if (reportItems.length > 0) {
+      console.log('리포트 아이템 첫번째 샘플:', JSON.stringify(reportItems[0]));
+    }
+    
+    // 결과 데이터가 없는 경우, 요청한 키워드 ID에 맞는 빈 결과 생성
+    if (reportItems.length === 0) {
+      console.log('키워드 리포트 데이터가 없습니다. 빈 결과를 생성합니다.');
+      const emptyResults = keywordIds.map(keywordId => ({
+        id: keywordId,
+        keywordId: keywordId,
+        name: keywordNamesMap[keywordId] || `키워드 ${keywordId}`,
+        keywordName: keywordNamesMap[keywordId] || `키워드 ${keywordId}`,
+        impressions: 0,
+        clicks: 0,
+        ctr: 0,
+        cpc: 0,
+        cost: 0,
+        conversions: 0,
+        conversionRate: 0,
+        costPerConversion: 0,
+        conversionValue: 0,
+        roas: 0
+      }));
+      
+      return { 
+        data: emptyResults,
+        keywordNamesMap: keywordNamesMap
+      };
+    }
+    
+    // 응용 프로그램에서 사용하는 형식으로 변환
+    const formattedData = reportItems.map((item: any) => {
+      const dimensions = item.dimensions || {};
+      const metrics = item.metrics || {};
+      
+      // 키워드 ID 추출 - API 가이드에 따라 dimensions.keywordId 필드 사용
+      let keywordId = dimensions.keywordId || '';
+      
+      // ID에서 날짜 부분 제거 (있는 경우)
+      if (!keywordId && item.id && item.id.includes('-')) {
+        keywordId = item.id.split('-')[0];
+      }
+      
+      // 날짜 정보 추출
+      const reportDate = dimensions.date || item.date || item.start || '';
+      
+      // 각 지표 확인 및 로깅
+      console.log(`리포트 항목 처리: ID=${keywordId}, 날짜=${reportDate}, 노출=${metrics.imp}, 클릭=${metrics.click}`);
+      
+      return {
+        id: reportDate ? `${keywordId}-${reportDate}` : keywordId,
+        name: keywordNamesMap[keywordId] || `키워드 ${keywordId}`,
+        date: reportDate,
+        keywordId: keywordId,
+        keywordName: keywordNamesMap[keywordId] || `키워드 ${keywordId}`,
+        
+        // API 응답 필드 매핑 (카카오 API 가이드 기준)
+        imp: metrics.imp ? parseInt(metrics.imp) : 0,
+        click: metrics.click ? parseInt(metrics.click) : 0,
+        ctr: metrics.ctr ? parseFloat(metrics.ctr) / 100 : 0, // API 응답 CTR은 백분율
+        ppc: metrics.ppc || 0, // 평균 클릭당 비용
+        spending: metrics.spending ? parseFloat(metrics.spending) : 0,
+        
+        // 애플리케이션 내부 사용 필드 (기존 필드명과 호환)
+        impressions: metrics.imp ? parseInt(metrics.imp) : 0,
+        clicks: metrics.click ? parseInt(metrics.click) : 0,
+        cpc: metrics.ppc || 0, // ppc 필드 사용
+        cost: metrics.spending ? parseFloat(metrics.spending) : 0,
+        
+        // 전환 관련 필드 (필드명 매핑)
+        conversions: metrics.convPurchase1d || 0, // 1일 전환 사용
+        conversionRate: (metrics.convPurchase1d && metrics.click) ? 
+                      (parseInt(metrics.convPurchase1d) / parseInt(metrics.click)) : 0,
+        costPerConversion: (metrics.convPurchase1d && metrics.spending) ? 
+                         (parseFloat(metrics.spending) / parseInt(metrics.convPurchase1d)) : 0,
+        conversionValue: metrics.convPurchaseP1d || 0, // 1일 전환 금액 사용
+        roas: (metrics.convPurchaseP1d && metrics.spending) ?
+             (parseFloat(metrics.convPurchaseP1d) / parseFloat(metrics.spending)) * 100 : 0
+      };
+    });
+    
+    console.log(`키워드 리포트 최종 데이터 개수: ${formattedData.length}`);
+    return { 
+      data: formattedData,
+      keywordNamesMap: keywordNamesMap // 키워드 이름 매핑도 함께 반환
+    };
+  } catch (error) {
+    console.error('키워드 리포트 데이터 형식화 오류:', error);
+    return { data: [] };
   }
 }
 

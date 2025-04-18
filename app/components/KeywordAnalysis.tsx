@@ -140,7 +140,10 @@ const KeywordAnalysis = () => {
             keywordIds,
             startDate: dateFilter.startDate,
             endDate: dateFilter.endDate,
-            campaignId: selectedCampaignId // 캠페인 ID도 함께 전달
+            campaignId: selectedCampaignId,
+            adGroupId: selectedAdGroupId,
+            timeUnit: 'DAY',
+            metricsGroups: ['BASIC']
           });
           
           console.log('키워드 리포트 응답:', keywordReportResponse.data);
@@ -185,26 +188,6 @@ const KeywordAnalysis = () => {
       })
     : keywordReportData;
 
-  // 클릭 차트 데이터 준비 (상위 10개)
-  const prepareClicksChartData = () => {
-    const sortedData = [...filteredKeywordData].sort((a, b) => b.clicks - a.clicks).slice(0, 10);
-    return sortedData;
-  };
-
-  // CTR 차트 데이터 준비 (상위 10개)
-  const prepareCtrChartData = () => {
-    const sortedData = [...filteredKeywordData].sort((a, b) => b.ctr - a.ctr).slice(0, 10);
-    return sortedData;
-  };
-
-  // 전환율 차트 데이터 준비 (상위 10개)
-  const prepareConversionRateChartData = () => {
-    const sortedData = [...filteredKeywordData]
-      .sort((a, b) => b.conversionRate - a.conversionRate)
-      .slice(0, 10);
-    return sortedData;
-  };
-
   // 리포트 생성 함수
   const generateReport = async () => {
     if (!selectedAccountId) {
@@ -225,8 +208,8 @@ const KeywordAnalysis = () => {
         dateFilter
       });
       
-      // 레벨 결정
-      if (selectedKeywordId && selectedAdGroupId && selectedCampaignId) {
+      // 레벨 결정 - 키워드가 선택된 경우 최우선으로 처리
+      if (selectedKeywordId) {
         level = 'keyword';
       } else if (selectedAdGroupId && selectedCampaignId) {
         level = 'adGroup';
@@ -235,6 +218,8 @@ const KeywordAnalysis = () => {
       } else {
         level = 'account';
       }
+
+      console.log(`선택된 레벨: ${level}`);
 
       let endpoint = 'accountReport';
       let params: any = {
@@ -245,8 +230,23 @@ const KeywordAnalysis = () => {
         metricsGroups: ['BASIC']
       };
       
+      // 키워드가 선택된 경우, 키워드 리포트 API 사용 - 최우선
+      if (selectedKeywordId) {
+        endpoint = 'keywordReport';
+        params = {
+          adAccountId: selectedAccountId,
+          keywordIds: [selectedKeywordId],
+          campaignId: selectedCampaignId,
+          adGroupId: selectedAdGroupId,
+          startDate: dateFilter.startDate,
+          endDate: dateFilter.endDate,
+          timeUnit: 'DAY',
+          metricsGroups: ['BASIC']
+        };
+        console.log(`키워드 리포트 생성 요청 - 키워드: ${selectedKeywordId}, 캠페인: ${selectedCampaignId}, 광고그룹: ${selectedAdGroupId}`);
+      }
       // 광고 그룹이 선택된 경우, 광고 그룹 리포트 API 사용
-      if (selectedAdGroupId) {
+      else if (selectedAdGroupId && selectedCampaignId) {
         endpoint = 'adGroupReport';
         params = {
           adAccountId: selectedAccountId,
@@ -257,7 +257,7 @@ const KeywordAnalysis = () => {
           timeUnit: 'DAY',
           metricsGroups: ['BASIC']
         };
-        console.log(`광고 그룹 리포트 생성 요청 - 계정: ${selectedAccountId}, 캠페인: ${selectedCampaignId}, 광고 그룹: ${selectedAdGroupId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
+        console.log(`광고 그룹 리포트 생성 요청 - 광고 그룹: ${selectedAdGroupId}`);
       }
       // 캠페인이 선택된 경우, 캠페인 리포트 API 사용
       else if (selectedCampaignId) {
@@ -270,27 +270,13 @@ const KeywordAnalysis = () => {
           timeUnit: 'DAY',
           metricsGroups: ['BASIC']
         };
-        console.log(`캠페인 리포트 생성 요청 - 계정: ${selectedAccountId}, 캠페인: ${selectedCampaignId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
-      }
-      // 키워드가 선택된 경우, 키워드 리포트 API 사용
-      else if (selectedKeywordId) {
-        endpoint = 'keywordReport';
-        params = {
-          adAccountId: selectedAccountId,
-          keywordIds: [selectedKeywordId],
-          campaignId: selectedCampaignId,
-          adGroupId: selectedAdGroupId,
-          startDate: dateFilter.startDate,
-          endDate: dateFilter.endDate,
-          timeUnit: 'DAY',
-          metricsGroups: ['BASIC']
-        };
-        console.log(`키워드 리포트 생성 요청 - 계정: ${selectedAccountId}, 캠페인: ${selectedCampaignId}, 광고 그룹: ${selectedAdGroupId}, 키워드: ${selectedKeywordId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
+        console.log(`캠페인 리포트 생성 요청 - 캠페인: ${selectedCampaignId}`);
       } else {
-        console.log(`계정 리포트 생성 요청 - 계정: ${selectedAccountId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
+        console.log(`계정 리포트 생성 요청 - 계정: ${selectedAccountId}`);
       }
       
       // API 호출
+      console.log(`API 호출: ${endpoint}`, params);
       const response = await axios.post('/api/kakao', {
         endpoint,
         ...params
@@ -302,8 +288,32 @@ const KeywordAnalysis = () => {
         // API 원본 데이터를 그대로 설정
         let reportData = response.data.data;
         
+        // 키워드 리포트일 경우에 선택한 키워드의 데이터만 필터링
+        if (endpoint === 'keywordReport' && selectedKeywordId) {
+          console.log(`키워드 리포트 필터링 시도 - 선택된 키워드 ID: ${selectedKeywordId}`);
+          console.log('키워드 리포트 원본 데이터:', reportData.slice(0, 2));
+          
+          // 원본 데이터의 구조를 확인하고 필터링
+          reportData = reportData.filter((item: any) => {
+            // dimensions.keywordId 또는 keywordId를 확인
+            const dimensions = item.dimensions || {};
+            const keywordId = dimensions.keywordId 
+              ? String(dimensions.keywordId) 
+              : (item.keywordId 
+                  ? String(item.keywordId) 
+                  : (item.id 
+                      ? String(item.id).split('-')[0] 
+                      : ''));
+            
+            const isMatch = keywordId === selectedKeywordId;
+            console.log(`키워드 아이템 검사: ${keywordId} vs ${selectedKeywordId} -> ${isMatch ? '일치' : '불일치'}`);
+            return isMatch;
+          });
+          
+          console.log(`필터링 후 키워드 리포트 데이터: ${reportData.length}개 항목`);
+        }
         // 광고 그룹 리포트일 경우에만 선택한 광고 그룹의 데이터만 필터링
-        if (endpoint === 'adGroupReport' && selectedAdGroupId) {
+        else if (endpoint === 'adGroupReport' && selectedAdGroupId) {
           console.log(`광고 그룹 리포트 필터링 시도 - 선택된 광고 그룹 ID: ${selectedAdGroupId}`);
           console.log('광고 그룹 리포트 원본 데이터:', reportData.slice(0, 2));
           
@@ -312,7 +322,7 @@ const KeywordAnalysis = () => {
             // dimensions.adGroupId 또는 adGroupId를 확인
             const dimensions = item.dimensions || {};
             const adGroupId = dimensions.adGroupId ? String(dimensions.adGroupId) : 
-                             (item.adGroupId ? String(item.adGroupId) : '');
+                            (item.adGroupId ? String(item.adGroupId) : '');
             
             const isMatch = adGroupId === selectedAdGroupId;
             console.log(`아이템 검사: ${adGroupId} vs ${selectedAdGroupId} -> ${isMatch ? '일치' : '불일치'}`);
@@ -486,17 +496,34 @@ const KeywordAnalysis = () => {
       {reportGenerated && !loading && !error && (
         <>
           <div className="bg-white p-4 rounded-lg shadow mb-6">
-            <h2 className="text-xl font-semibold mb-4 text-gray-800">
-              {generatedLevel === 'account' && '계정 레벨 리포트'}
-              {generatedLevel === 'campaign' && '캠페인 레벨 리포트'}
-              {generatedLevel === 'adGroup' && '광고 그룹 레벨 리포트'}
-              {generatedLevel === 'keyword' && '키워드 레벨 리포트'}
-            </h2>
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-800">
+                {(() => {
+                  switch(generatedLevel) {
+                    case 'account':
+                      const accountName = adAccounts.find(a => a.id === selectedAccountId)?.name;
+                      return `계정 리포트${accountName ? `: ${accountName}` : ''}`;
+                    case 'campaign':
+                      const campaignName = campaigns.find(c => c.id === selectedCampaignId)?.name;
+                      return `캠페인 리포트${campaignName ? `: ${campaignName}` : ''}`;
+                    case 'adGroup':
+                      const adGroupName = adGroups.find(g => g.id === selectedAdGroupId)?.name;
+                      return `광고 그룹 리포트${adGroupName ? `: ${adGroupName}` : ''}`;
+                    case 'keyword':
+                      const keywordText = keywords.find(k => k.id === selectedKeywordId)?.text;
+                      return `키워드 리포트${keywordText ? `: ${keywordText}` : ''}`;
+                    default:
+                      return '리포트';
+                  }
+                })()}
+              </h2>
+              <div className="mt-2 md:mt-0 text-sm bg-blue-50 px-3 py-1 rounded-full text-blue-700 font-medium">
+                데이터 개수: {dateReportData.length}개
+              </div>
+            </div>
             
             <div className="mb-6">
-              <h3 className="text-lg font-medium mb-3 text-gray-700">일자별 성과</h3>
-              <pre className="bg-gray-100 p-2 text-xs mb-2 overflow-auto">{`dateReportData 개수: ${dateReportData.length}`}</pre>
-              <ReportTable data={dateReportData} title="일자별 데이터" />
+              <ReportTable data={dateReportData} title="일자별 성과" />
               
               {dateReportData.length > 0 && (
                 <div className="mt-6">
@@ -523,29 +550,6 @@ const KeywordAnalysis = () => {
                 </div>
               )}
             </div>
-            
-            {generatedLevel === 'keyword' && filteredKeywordData.length > 0 && (
-              <>
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6 mb-8">
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">클릭수 상위 키워드</h3>
-                    <ReportChart data={prepareClicksChartData()} title="클릭수 상위 키워드" />
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">CTR 상위 키워드</h3>
-                    <ReportChart data={prepareCtrChartData()} title="CTR 상위 키워드" />
-                  </div>
-                  <div className="bg-white p-4 rounded-lg shadow">
-                    <h3 className="text-lg font-semibold text-gray-800 mb-4">전환율 상위 키워드</h3>
-                    <ReportChart data={prepareConversionRateChartData()} title="전환율 상위 키워드" />
-                  </div>
-                </div>
-
-                <div className="mb-8">
-                  <ReportTable data={filteredKeywordData} title="키워드별 상세 성과" />
-                </div>
-              </>
-            )}
           </div>
         </>
       )}

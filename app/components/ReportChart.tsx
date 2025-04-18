@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -76,56 +76,82 @@ const ReportChart: React.FC<ReportChartProps> = ({
   const labels = sortedData.map(item => item.date);
 
   // 차트 데이터 생성
-  const chartData = {
-    labels,
-    datasets: [
-      // 노출수 데이터셋
-      {
+  const chartData = useMemo(() => {
+    console.log('Chart data:', data);
+    if (!data || (Array.isArray(data) && data.length === 0)) {
+      return {
+        labels: [],
+        datasets: []
+      };
+    }
+
+    // 날짜별로 정렬
+    const sortedData = [...(Array.isArray(data) ? data : [data])].sort((a, b) => {
+      return new Date(a.date || '').getTime() - new Date(b.date || '').getTime();
+    });
+
+    // 데이터셋 준비
+    const labels = sortedData.map(item => item.date);
+    
+    const datasets = [];
+    
+    // 노출수 데이터셋
+    if (metrics.includes('impressions') || metrics.includes('imp')) {
+      datasets.push({
         label: '노출수',
-        data: sortedData.map(item => item.impressions),
-        borderColor: 'rgb(53, 162, 235)',
+        data: sortedData.map(item => item.impressions || item.imp || 0),
         backgroundColor: 'rgba(53, 162, 235, 0.5)',
+        borderColor: 'rgba(53, 162, 235, 1)',
         yAxisID: 'y',
-        hidden: !metrics.includes('impressions'),
-      },
-      // 클릭수 데이터셋
-      {
+      });
+    }
+    
+    // 클릭수 데이터셋
+    if (metrics.includes('clicks') || metrics.includes('click')) {
+      datasets.push({
         label: '클릭수',
-        data: sortedData.map(item => item.clicks),
-        borderColor: 'rgb(255, 99, 132)',
+        data: sortedData.map(item => item.clicks || item.click || 0),
         backgroundColor: 'rgba(255, 99, 132, 0.5)',
+        borderColor: 'rgba(255, 99, 132, 1)',
         yAxisID: 'y',
-        hidden: !metrics.includes('clicks'),
-      },
-      // 비용 데이터셋
-      {
-        label: '비용(원)',
-        data: sortedData.map(item => item.cost),
-        borderColor: 'rgb(75, 192, 192)',
+      });
+    }
+    
+    // 비용 데이터셋
+    if (metrics.includes('cost') || metrics.includes('spending')) {
+      datasets.push({
+        label: '비용',
+        data: sortedData.map(item => item.cost || item.spending || 0),
         backgroundColor: 'rgba(75, 192, 192, 0.5)',
+        borderColor: 'rgba(75, 192, 192, 1)',
         yAxisID: 'y1',
-        hidden: !metrics.includes('cost'),
-      },
-      // 전환수 데이터셋
-      {
+      });
+    }
+    
+    // 전환수 데이터셋
+    if (metrics.includes('conversions')) {
+      datasets.push({
         label: '전환수',
         data: sortedData.map(item => item.conversions || 0),
-        borderColor: 'rgb(255, 159, 64)',
         backgroundColor: 'rgba(255, 159, 64, 0.5)',
+        borderColor: 'rgba(255, 159, 64, 1)',
         yAxisID: 'y',
-        hidden: !metrics.includes('conversions'),
-      },
-      // 전환가치 데이터셋
-      {
-        label: '전환가치(원)',
+      });
+    }
+    
+    // 전환가치 데이터셋
+    if (metrics.includes('conversionValue')) {
+      datasets.push({
+        label: '전환가치',
         data: sortedData.map(item => item.conversionValue || 0),
-        borderColor: 'rgb(153, 102, 255)',
         backgroundColor: 'rgba(153, 102, 255, 0.5)',
+        borderColor: 'rgba(153, 102, 255, 1)',
         yAxisID: 'y1',
-        hidden: !metrics.includes('conversionValue'),
-      }
-    ]
-  };
+      });
+    }
+    
+    return { labels, datasets };
+  }, [data, metrics]);
 
   // 차트 옵션
   const options: ChartOptions<'line'> = {

@@ -37,7 +37,11 @@ export async function GET(request: NextRequest) {
         if (!adAccountId || !adGroupId) {
           return NextResponse.json({ error: 'adAccountId and adGroupId parameters are required' }, { status: 400 });
         }
-        result = await kakaoAdApi.getKeywords(adAccountId, adGroupId, campaignId);
+        result = await kakaoAdApi.getKeywords(
+          adAccountId, 
+          adGroupId, 
+          campaignId || undefined
+        );
         break;
       default:
         return NextResponse.json({ error: 'Invalid endpoint parameter' }, { status: 400 });
@@ -103,8 +107,25 @@ export async function POST(request: NextRequest) {
         if (!keywordIds || !keywordIds.length) {
           return NextResponse.json({ error: 'keywordIds parameter is required' }, { status: 400 });
         }
-        console.log(`키워드 리포트 조회: ${adAccountId} ${start} ~ ${end} (${timeUnit})`);
-        result = await kakaoAdApi.getKeywordReport(adAccountId, keywordIds, start, end, metrics, timeUnit);
+        if (!body.campaignId) {
+          return NextResponse.json({ error: 'campaignId parameter is required for keyword reports' }, { status: 400 });
+        }
+        console.log(`키워드 리포트 조회: ${adAccountId} ${start} ~ ${end} (${timeUnit}), 키워드: ${keywordIds.join(',')}`);
+        console.log('키워드 리포트 요청 파라미터:', { 
+          campaignId: body.campaignId, 
+          adGroupId: body.adGroupId 
+        });
+        
+        result = await kakaoAdApi.getKeywordReport(
+          adAccountId, 
+          keywordIds, 
+          start, 
+          end, 
+          metrics, 
+          timeUnit,
+          body.campaignId,
+          body.adGroupId
+        );
         break;
       default:
         return NextResponse.json({ error: 'Invalid endpoint parameter' }, { status: 400 });
