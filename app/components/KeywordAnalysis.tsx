@@ -22,7 +22,7 @@ const KeywordAnalysis = () => {
   const [selectedAdGroupId, setSelectedAdGroupId] = useState<string>('');
   const [keywords, setKeywords] = useState<any[]>([]);
   const [keywordReportData, setKeywordReportData] = useState<ReportData[]>([]);
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedKeywordId, setSelectedKeywordId] = useState<string>('');
   const [reportGenerated, setReportGenerated] = useState<boolean>(false);
   const [generatedLevel, setGeneratedLevel] = useState<'account' | 'campaign' | 'adGroup' | 'keyword' | null>(null);
   const [dateReportData, setDateReportData] = useState<ReportData[]>([]);
@@ -35,11 +35,6 @@ const KeywordAnalysis = () => {
         const response = await axios.get('/api/kakao?endpoint=adAccounts');
         const accounts = response.data;
         setAdAccounts(accounts.data || []);
-        
-        // 자동 선택 제거
-        // if (accounts.data && accounts.data.length > 0) {
-        //   setSelectedAccountId(accounts.data[0].id);
-        // }
       } catch (err: any) {
         setError(err.message || '광고 계정을 불러오는 중 오류가 발생했습니다.');
       } finally {
@@ -77,13 +72,6 @@ const KeywordAnalysis = () => {
         console.log('유효한 캠페인 수:', validCampaigns.length);
         
         setCampaigns(validCampaigns);
-        
-        // 자동 선택 제거
-        // if (validCampaigns.length > 0) {
-        //   const firstCampaignId = validCampaigns[0].id;
-        //   console.log('첫번째 캠페인 ID 설정:', firstCampaignId);
-        //   setSelectedCampaignId(firstCampaignId);
-        // }
       } catch (err: any) {
         console.error('캠페인 로딩 오류:', err);
         setError(err.message || '캠페인을 불러오는 중 오류가 발생했습니다.');
@@ -112,11 +100,6 @@ const KeywordAnalysis = () => {
         const response = await axios.get(`/api/kakao?endpoint=adGroups&adAccountId=${selectedAccountId}&campaignId=${selectedCampaignId}`);
         const result = response.data;
         setAdGroups(result.data || []);
-        
-        // 자동 선택 제거
-        // if (result.data && result.data.length > 0) {
-        //   setSelectedAdGroupId(result.data[0].id);
-        // }
       } catch (err: any) {
         setError(err.message || '광고 그룹을 불러오는 중 오류가 발생했습니다.');
       } finally {
@@ -135,9 +118,15 @@ const KeywordAnalysis = () => {
       try {
         setLoading(true);
         setKeywordReportData([]);
+        setSelectedKeywordId('');
         
-        const response = await axios.get(`/api/kakao?endpoint=keywords&adAccountId=${selectedAccountId}&adGroupId=${selectedAdGroupId}`);
+        console.log(`키워드 조회 시작 - 계정: ${selectedAccountId}, 광고그룹: ${selectedAdGroupId}, 캠페인: ${selectedCampaignId}`);
+        
+        // 캠페인 ID도 함께 쿼리 파라미터로 전달
+        const response = await axios.get(`/api/kakao?endpoint=keywords&adAccountId=${selectedAccountId}&adGroupId=${selectedAdGroupId}${selectedCampaignId ? `&campaignId=${selectedCampaignId}` : ''}`);
+        
         const result = response.data;
+        console.log(`키워드 응답 데이터:`, result);
         setKeywords(result.data || []);
         
         if (result.data && result.data.length > 0) {
@@ -150,7 +139,8 @@ const KeywordAnalysis = () => {
             adAccountId: selectedAccountId,
             keywordIds,
             startDate: dateFilter.startDate,
-            endDate: dateFilter.endDate
+            endDate: dateFilter.endDate,
+            campaignId: selectedCampaignId // 캠페인 ID도 함께 전달
           });
           
           console.log('키워드 리포트 응답:', keywordReportResponse.data);
@@ -185,12 +175,15 @@ const KeywordAnalysis = () => {
     };
 
     fetchKeywords();
-  }, [selectedAccountId, selectedAdGroupId, dateFilter]);
+  }, [selectedAccountId, selectedAdGroupId, dateFilter, selectedCampaignId]);
 
-  // 키워드 필터링
-  const filteredKeywordData = keywordReportData.filter(item => 
-    item.name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // 키워드 필터링 - 선택된 키워드 ID를 기준으로 필터링
+  const filteredKeywordData = selectedKeywordId
+    ? keywordReportData.filter(item => {
+        const keywordId = item.id?.split('-')[0] || item.id;
+        return keywordId === selectedKeywordId;
+      })
+    : keywordReportData;
 
   // 클릭 차트 데이터 준비 (상위 10개)
   const prepareClicksChartData = () => {
@@ -219,10 +212,30 @@ const KeywordAnalysis = () => {
       return;
     }
 
+    setLoading(true);
+    setError(null);
+    let level = 'account';
+
     try {
-      setLoading(true);
-      setError(null);
+      console.log('리포트 생성 시작', {
+        adAccountId: selectedAccountId,
+        campaignId: selectedCampaignId,
+        adGroupId: selectedAdGroupId,
+        keywordId: selectedKeywordId,
+        dateFilter
+      });
       
+      // 레벨 결정
+      if (selectedKeywordId && selectedAdGroupId && selectedCampaignId) {
+        level = 'keyword';
+      } else if (selectedAdGroupId && selectedCampaignId) {
+        level = 'adGroup';
+      } else if (selectedCampaignId) {
+        level = 'campaign';
+      } else {
+        level = 'account';
+      }
+
       let endpoint = 'accountReport';
       let params: any = {
         adAccountId: selectedAccountId,
@@ -258,6 +271,21 @@ const KeywordAnalysis = () => {
           metricsGroups: ['BASIC']
         };
         console.log(`캠페인 리포트 생성 요청 - 계정: ${selectedAccountId}, 캠페인: ${selectedCampaignId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
+      }
+      // 키워드가 선택된 경우, 키워드 리포트 API 사용
+      else if (selectedKeywordId) {
+        endpoint = 'keywordReport';
+        params = {
+          adAccountId: selectedAccountId,
+          keywordIds: [selectedKeywordId],
+          campaignId: selectedCampaignId,
+          adGroupId: selectedAdGroupId,
+          startDate: dateFilter.startDate,
+          endDate: dateFilter.endDate,
+          timeUnit: 'DAY',
+          metricsGroups: ['BASIC']
+        };
+        console.log(`키워드 리포트 생성 요청 - 계정: ${selectedAccountId}, 캠페인: ${selectedCampaignId}, 광고 그룹: ${selectedAdGroupId}, 키워드: ${selectedKeywordId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
       } else {
         console.log(`계정 리포트 생성 요청 - 계정: ${selectedAccountId}, 기간: ${dateFilter.startDate} ~ ${dateFilter.endDate}`);
       }
@@ -303,14 +331,7 @@ const KeywordAnalysis = () => {
           setDateReportData(reportData);
           
           // 선택된 레벨에 따라 generatedLevel 설정
-          let level: 'account' | 'campaign' | 'adGroup' | 'keyword' = 'account';
-          if (selectedAdGroupId) {
-            level = 'adGroup';
-          } else if (selectedCampaignId) {
-            level = 'campaign';
-          }
-          
-          setGeneratedLevel(level);
+          setGeneratedLevel(level as 'account' | 'campaign' | 'adGroup' | 'keyword');
           setReportGenerated(true);
         }
       } else {
@@ -404,17 +425,28 @@ const KeywordAnalysis = () => {
           </div>
           
           <div>
-            <label htmlFor="keyword-search" className="block text-sm font-medium text-gray-700 mb-1">
-              키워드 검색
+            <label htmlFor="keyword-select" className="block text-sm font-medium text-gray-700 mb-1">
+              키워드
             </label>
-            <input
-              id="keyword-search"
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="키워드 검색..."
+            <select
+              id="keyword-select"
+              value={selectedKeywordId}
+              onChange={(e) => setSelectedKeywordId(e.target.value)}
               className="mt-1 block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            />
+              disabled={!selectedAdGroupId || keywords.length === 0}
+            >
+              <option value="">키워드를 선택하세요</option>
+              {keywords.map((keyword) => (
+                <option key={keyword.id} value={keyword.id}>
+                  {keyword.text || keyword.keyword}
+                </option>
+              ))}
+            </select>
+            {keywords.length > 0 && (
+              <div className="mt-1 text-xs text-gray-500">
+                {keywords.length}개의 키워드가 로드됨
+              </div>
+            )}
           </div>
         </div>
         
@@ -475,7 +507,7 @@ const KeywordAnalysis = () => {
                       <ReportChart 
                         data={dateReportData}
                         title="클릭 & 노출 추이"
-                        metrics={['imp', 'click']}
+                        metrics={['impressions', 'clicks']}
                       />
                     </div>
                     
@@ -484,7 +516,7 @@ const KeywordAnalysis = () => {
                       <ReportChart 
                         data={dateReportData}
                         title="비용 & 전환 추이"
-                        metrics={['spending', 'conversion']}
+                        metrics={['cost', 'conversions']}
                       />
                     </div>
                   </div>

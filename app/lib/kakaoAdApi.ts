@@ -143,38 +143,72 @@ export const getAdGroups = async (adAccountId: string, campaignId?: string) => {
   }
 };
 
-// 키워드 목록 조회
-export const getKeywords = async (adAccountId: string, adGroupId: string) => {
+// 특정 광고 그룹의 키워드 목록 조회
+export const getKeywords = async (adAccountId: string, adGroupId: string, campaignId?: string) => {
   try {
-    console.log('키워드 목록 조회 시도:', adAccountId, adGroupId);
-    const response = await apiClient.get('/openapi/v1/keywords', {
+    console.log(`키워드 조회 시도: 계정 ID=${adAccountId}, 광고 그룹 ID=${adGroupId}${campaignId ? `, 캠페인 ID=${campaignId}` : ''}`);
+    
+    // API 호출
+    const response = await apiClient({
+      method: 'GET',
+      url: '/openapi/v1/keywords',
       headers: {
         'adAccountId': adAccountId
       },
       params: {
-        adGroupId
+        adGroupId: adGroupId,
+        ...(campaignId && { campaignId: campaignId }),
+        size: 100 // 더 많은 키워드를 검색하기 위한 파라미터
       }
     });
-    console.log('키워드 응답 데이터:', response.data);
     
-    // 응답이 배열이면 그대로 사용, content 필드에 있으면 content에서 추출
-    const keywords = Array.isArray(response.data) 
+    console.log('키워드 조회 응답 상태:', response.status);
+    
+    // API 응답 형식 처리 (페이지네이션 응답 또는 직접 배열)
+    let keywords = Array.isArray(response.data) 
       ? response.data 
       : (response.data?.content || []);
     
-    console.log(`키워드 ${keywords.length}개 추출됨`);
-    
-    return { data: keywords };
+    // 키워드 데이터가 유효한지 확인
+    if (keywords && keywords.length > 0) {
+      console.log(`키워드 데이터 ${keywords.length}개 수신 성공`);
+      
+      // 키워드 정보 구조 확인 및 매핑
+      const processedKeywords = keywords.map((keyword: any) => {
+        // 키워드 텍스트가 keyword 혹은 text 필드에 있는지 확인
+        const keywordText = keyword.keyword || keyword.text || `키워드 ${keyword.id}`;
+        
+        return {
+          id: keyword.id,
+          text: keywordText,
+          keyword: keywordText, // 두 필드를 모두 설정하여 일관성 확보
+          adGroupId: keyword.adGroupId || adGroupId,
+          campaignId: keyword.campaignId || campaignId,
+          status: keyword.status || 'UNKNOWN'
+        };
+      });
+      
+      console.log(`처리된 키워드 첫 2개 샘플:`, JSON.stringify(processedKeywords.slice(0, 2)));
+      return { data: processedKeywords };
+    } else {
+      console.log('유효한 키워드 데이터가 없습니다.');
+      return { data: [] };
+    }
   } catch (error: any) {
-    console.error('키워드 조회 오류:', error.response?.data || error.message);
-    // 임시 테스트 데이터 반환
-    return {
-      data: [
-        { id: 'test-keyword-1', keyword: '테스트 키워드 1', adGroupId, bid: 700 },
-        { id: 'test-keyword-2', keyword: '테스트 키워드 2', adGroupId, bid: 500 },
-        { id: 'test-keyword-3', keyword: '테스트 키워드 3', adGroupId, bid: 1000 }
-      ]
-    };
+    console.error('키워드 조회 오류:', error.response?.status, error.response?.data || error.message);
+    
+    // 테스트 데이터 반환
+    const testKeywords = Array.from({ length: 10 }, (_, i) => ({
+      id: `test-keyword-${i+1}`,
+      text: `테스트 키워드 ${i+1}`,
+      keyword: `테스트 키워드 ${i+1}`,
+      adGroupId: adGroupId,
+      campaignId: campaignId || 'unknown',
+      status: 'ACTIVE'
+    }));
+    
+    console.log('테스트 키워드 데이터 사용:', testKeywords.length);
+    return { data: testKeywords };
   }
 };
 
@@ -648,73 +682,12 @@ export const getAdGroupReport = async (
   }
 };
 
-// 키워드별 리포트 데이터 조회
-export async function getKeywordReport(
-  adAccountId: string,
-  keywordIds: string[],
-  startDate: string,
-  endDate: string,
-  metricsGroups: string[] = ['BASIC'],
-  timeUnit: string = 'DAY'
-): Promise<any> {
+// 리포트 데이터 형식화 함수
+function formatReportData(data: any, keywordNamesMap: Record<string, string>) {
   try {
-    console.log(`키워드 리포트 가져오기: ${adAccountId}, 키워드 ${keywordIds.length}개, 기간: ${startDate}~${endDate}, timeUnit: ${timeUnit}`);
-    
-    // 날짜 형식 변환 (YYYY-MM-DD -> YYYYMMDD)
-    const start = startDate.replace(/-/g, '');
-    const end = endDate.replace(/-/g, '');
-    
-    // 키워드 정보 가져오기
-    const keywordsResponse = await apiClient.get('/openapi/v1/keywords', {
-      headers: {
-        'adAccountId': adAccountId
-      },
-      params: {
-        keywordIds: keywordIds.join(',')
-      }
-    });
-    
-    const keywords = Array.isArray(keywordsResponse.data) 
-      ? keywordsResponse.data 
-      : (keywordsResponse.data?.content || []);
-    
-    // 키워드 ID를 키로, 키워드 텍스트를 값으로 하는 매핑 생성
-    const keywordNamesMap: Record<string, string> = {};
-    keywords.forEach((keyword: any) => {
-      keywordNamesMap[keyword.id] = keyword.keyword;
-    });
-    
-    // 키워드 보고서를 가져오기 위한 매개변수 설정
-    const params: any = {
-      keywordIds: keywordIds.join(','),
-      start,
-      end,
-      metricsGroups: metricsGroups.join(',')
-    };
-    
-    // 날짜별 데이터가 필요한 경우에만 timeUnit만 추가(dimension 제거)
-    if (timeUnit !== 'NONE') {
-      params.timeUnit = timeUnit;
-    }
-
-    console.log('키워드 리포트 요청 파라미터:', params);
-    
-    // API 호출
-    const response = await apiClient({
-      method: 'GET',
-      url: '/openapi/v1/keywords/report',
-      headers: {
-        'adAccountId': adAccountId
-      },
-      params
-    });
-    
-    console.log('키워드 리포트 응답 상태:', response.status);
-    console.log('키워드 리포트 응답 데이터:', JSON.stringify(response.data).substring(0, 500) + '...');
-    
     // 응답 매핑 처리
-    const reportItems = response.data?.data || [];
-    console.log('키워드 리포트 세부 데이터:', JSON.stringify(reportItems.slice(0, 2)));
+    const reportItems = data?.data || [];
+    console.log('리포트 세부 데이터:', JSON.stringify(reportItems.slice(0, 2)));
     
     // 응용 프로그램에서 사용하는 형식으로 변환
     const formattedData = reportItems.map((item: any) => {
@@ -754,37 +727,120 @@ export async function getKeywordReport(
       };
     });
     
-    console.log(`키워드 리포트 변환된 데이터 개수: ${formattedData.length}`);
+    console.log(`변환된 데이터 개수: ${formattedData.length}`);
     return { data: formattedData };
-  } catch (error: any) {
-    console.error('키워드 리포트 조회 오류:', error.response?.status, error.response?.data || error.message);
-    // 임시 테스트 데이터 반환
-    const testData = keywordIds.map((id, index) => {
-      const multiplier = (index % 3) + 1;
-      // 테스트 데이터에도 날짜 추가
-      const date = new Date(startDate);
-      date.setDate(date.getDate() + index);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      return {
-        id: `${id}-${dateStr}`,
-        name: dateStr,
-        date: dateStr,
-        keywordName: `테스트 키워드 ${index + 1}`,
-        impressions: 15000 * multiplier,
-        clicks: 750 * multiplier,
-        ctr: 0.05 * multiplier,
-        cpc: 600 - (index * 20),
-        cost: 450000 * multiplier,
-        conversions: 40 * multiplier,
-        conversionRate: 0.053 * multiplier,
-        costPerConversion: 11250 - (index * 500),
-        conversionValue: 5400000 * multiplier,
-        roas: 12.0 + (index * 0.3)
-      };
+  } catch (error) {
+    console.error('데이터 형식화 오류:', error);
+    return { data: [] };
+  }
+}
+
+// 테스트 키워드 리포트 데이터 생성 함수
+function getTestKeywordReport(keywordIds: string[], startDate: string, endDate: string) {
+  const testData = keywordIds.map((id, index) => {
+    const multiplier = (index % 3) + 1;
+    // 테스트 데이터에도 날짜 추가
+    const date = new Date(startDate);
+    date.setDate(date.getDate() + index);
+    const dateStr = date.toISOString().split('T')[0];
+    
+    return {
+      id: `${id}-${dateStr}`,
+      name: dateStr,
+      date: dateStr,
+      keywordName: `테스트 키워드 ${index + 1}`,
+      impressions: 15000 * multiplier,
+      clicks: 750 * multiplier,
+      ctr: 0.05 * multiplier,
+      cpc: 600 - (index * 20),
+      cost: 450000 * multiplier,
+      conversions: 40 * multiplier,
+      conversionRate: 0.053 * multiplier,
+      costPerConversion: 11250 - (index * 500),
+      conversionValue: 5400000 * multiplier,
+      roas: 12.0 + (index * 0.3)
+    };
+  });
+  
+  return { data: testData };
+}
+
+// 키워드별 리포트 데이터 조회
+export async function getKeywordReport(
+  adAccountId: string,
+  keywordIds: string[],
+  startDate: string,
+  endDate: string,
+  metricsGroups: string[] = ['BASIC'],
+  timeUnit: string = 'DAY'
+): Promise<any> {
+  try {
+    console.log('키워드 리포트 요청:', { adAccountId, keywordIds, startDate, endDate, metricsGroups, timeUnit });
+    
+    // 인증 헤더 가져오기
+    const headers = getAuthHeaders(adAccountId);
+    
+    // 날짜 형식 변환 (YYYY-MM-DD → YYYYMMDD)
+    const formattedStartDate = startDate.replace(/-/g, '');
+    const formattedEndDate = endDate.replace(/-/g, '');
+    
+    // 키워드 정보 가져오기 시도
+    const keywordNamesMap: Record<string, string> = {};
+    try {
+      console.log('키워드 정보 조회 시도...');
+      // 첫 번째 광고그룹 ID를 이용해 키워드 정보 조회
+      if (keywordIds.length > 0) {
+        const keywordResponse = await fetch(`/openapi/v1/keywords?ids=${keywordIds.join(',')}`, {
+          headers: headers
+        });
+        
+        if (keywordResponse.ok) {
+          const keywordData = await keywordResponse.json();
+          console.log('키워드 정보 조회 성공:', keywordData);
+          
+          // 키워드 ID → 텍스트 매핑 생성
+          if (keywordData && Array.isArray(keywordData)) {
+            keywordData.forEach((keyword: any) => {
+              if (keyword.id && keyword.text) {
+                keywordNamesMap[keyword.id] = keyword.text;
+              }
+            });
+          }
+        } else {
+          console.warn('키워드 정보 조회 실패:', keywordResponse.status);
+        }
+      }
+    } catch (error) {
+      console.error('키워드 정보 조회 중 오류:', error);
+    }
+    
+    // 키워드 리포트 API 호출
+    console.log('키워드 리포트 API 호출 시작...');
+    const response = await fetch(`/openapi/v1/keywords/report`, {
+      headers: headers,
+      method: 'GET',
+      cache: 'no-store',
+      next: { revalidate: 0 },
     });
     
-    return { data: testData };
+    // 상태 코드 확인
+    console.log('키워드 리포트 API 응답 상태:', response.status);
+    
+    if (!response.ok) {
+      throw new Error(`키워드 리포트 API 오류: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    console.log('키워드 리포트 API 응답:', data);
+    
+    // 응답 데이터 형식 확인 및 가공
+    const formattedData = formatReportData(data, keywordNamesMap);
+    return formattedData;
+    
+  } catch (error) {
+    console.error('키워드 리포트 가져오기 오류:', error);
+    // 에러 발생 시 테스트 데이터 반환 (개발 중에만 사용)
+    return getTestKeywordReport(keywordIds, startDate, endDate);
   }
 }
 

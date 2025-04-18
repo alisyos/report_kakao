@@ -34,16 +34,16 @@ interface ReportChartProps {
 const ReportChart: React.FC<ReportChartProps> = ({ 
   data, 
   title = '리포트 그래프',
-  metrics = ['imp', 'click', 'spending']
+  metrics = ['impressions', 'clicks', 'cost']
 }) => {
   // 데이터 상세 로깅 (디버깅용)
   if (data) {
     console.log('ReportChart 데이터 타입:', typeof data, Array.isArray(data) ? '배열임' : '배열 아님');
     if (Array.isArray(data) && data.length > 0) {
       console.log('ReportChart 첫 번째 데이터 항목:', data[0]);
-      console.log('ReportChart 데이터에 imp 필드 있음:', 'imp' in data[0]);
-      console.log('ReportChart 데이터에 click 필드 있음:', 'click' in data[0]);
-      console.log('ReportChart 데이터에 spending 필드 있음:', 'spending' in data[0]);
+      console.log('ReportChart 데이터에 impressions 필드 있음:', 'impressions' in data[0]);
+      console.log('ReportChart 데이터에 clicks 필드 있음:', 'clicks' in data[0]);
+      console.log('ReportChart 데이터에 cost 필드 있음:', 'cost' in data[0]);
     } else if (!Array.isArray(data)) {
       console.log('ReportChart 데이터 (배열 아님):', data);
     }
@@ -82,47 +82,47 @@ const ReportChart: React.FC<ReportChartProps> = ({
       // 노출수 데이터셋
       {
         label: '노출수',
-        data: sortedData.map(item => item.imp),
+        data: sortedData.map(item => item.impressions),
         borderColor: 'rgb(53, 162, 235)',
         backgroundColor: 'rgba(53, 162, 235, 0.5)',
         yAxisID: 'y',
-        hidden: !metrics.includes('imp'),
+        hidden: !metrics.includes('impressions'),
       },
       // 클릭수 데이터셋
       {
         label: '클릭수',
-        data: sortedData.map(item => item.click),
+        data: sortedData.map(item => item.clicks),
         borderColor: 'rgb(255, 99, 132)',
         backgroundColor: 'rgba(255, 99, 132, 0.5)',
         yAxisID: 'y',
-        hidden: !metrics.includes('click'),
+        hidden: !metrics.includes('clicks'),
       },
       // 비용 데이터셋
       {
         label: '비용(원)',
-        data: sortedData.map(item => item.spending),
+        data: sortedData.map(item => item.cost),
         borderColor: 'rgb(75, 192, 192)',
         backgroundColor: 'rgba(75, 192, 192, 0.5)',
         yAxisID: 'y1',
-        hidden: !metrics.includes('spending'),
+        hidden: !metrics.includes('cost'),
       },
       // 전환수 데이터셋
       {
         label: '전환수',
-        data: sortedData.map(item => item.conversion || 0),
+        data: sortedData.map(item => item.conversions || 0),
         borderColor: 'rgb(255, 159, 64)',
         backgroundColor: 'rgba(255, 159, 64, 0.5)',
         yAxisID: 'y',
-        hidden: !metrics.includes('conversion'),
+        hidden: !metrics.includes('conversions'),
       },
       // 전환가치 데이터셋
       {
         label: '전환가치(원)',
-        data: sortedData.map(item => item.convValue || 0),
+        data: sortedData.map(item => item.conversionValue || 0),
         borderColor: 'rgb(153, 102, 255)',
         backgroundColor: 'rgba(153, 102, 255, 0.5)',
         yAxisID: 'y1',
-        hidden: !metrics.includes('convValue'),
+        hidden: !metrics.includes('conversionValue'),
       }
     ]
   };

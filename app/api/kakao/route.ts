@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
         if (!adAccountId || !adGroupId) {
           return NextResponse.json({ error: 'adAccountId and adGroupId parameters are required' }, { status: 400 });
         }
-        result = await kakaoAdApi.getKeywords(adAccountId, adGroupId);
+        result = await kakaoAdApi.getKeywords(adAccountId, adGroupId, campaignId);
         break;
       default:
         return NextResponse.json({ error: 'Invalid endpoint parameter' }, { status: 400 });
